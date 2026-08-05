@@ -1,4 +1,5 @@
 import type { Page } from "playwright";
+import type { DomHelpers } from "../browser/dom-helpers.js";
 
 /**
  * Phase 7: where does the information sit on a detail page?
@@ -35,34 +36,7 @@ const NAME_HINTS: [RegExp, string, FieldCandidate["valueShape"]][] = [
 export async function findFieldCandidates(page: Page): Promise<FieldCandidate[]> {
   const raw = await page.evaluate(
     ({ hints }) => {
-      function cssPathOf(el: Element): string {
-        const id = el.getAttribute("id");
-        if (id && document.querySelectorAll(`[id="${id}"]`).length === 1) {
-          return `#${id}`;
-        }
-        const parts: string[] = [];
-        let node: Element | null = el;
-        while (node && node.nodeType === 1 && parts.length < 8) {
-          const tag = node.tagName.toLowerCase();
-          if (tag === "html" || tag === "body") break;
-          const parent: Element | null = node.parentElement;
-          if (!parent) {
-            parts.unshift(tag);
-            break;
-          }
-          const sameTag = Array.prototype.filter.call(
-            parent.children,
-            (c: Element) => c.tagName === node!.tagName,
-          ) as Element[];
-          parts.unshift(
-            sameTag.length > 1
-              ? `${tag}:nth-of-type(${sameTag.indexOf(node) + 1})`
-              : tag,
-          );
-          node = parent;
-        }
-        return parts.join(" > ");
-      }
+      const wg: DomHelpers = window.__wgraph;
 
       /** Text belonging to this element rather than to its children. */
       function ownText(el: Element): string {
@@ -96,7 +70,7 @@ export async function findFieldCandidates(page: Page): Promise<FieldCandidate[]>
         reason: string,
         confidence: string,
       ) => {
-        const css = cssPathOf(el);
+        const css = wg.cssPathOf(el);
         if (claimed.has(css)) return;
         claimed.add(css);
         out.push({ css, suggestedName, valueShape, reason, confidence });

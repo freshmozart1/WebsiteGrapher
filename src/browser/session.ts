@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import { sessionsDir } from "../graph/store.js";
+import { addDomHelpers } from "./dom-helpers.js";
 
 /**
  * A session is saved state, not a running browser.
@@ -101,6 +102,10 @@ export async function startRun(options: RunOptions): Promise<Run> {
     viewport: options.viewport ?? DEFAULT_VIEWPORT,
     ...restore,
   });
+  // Before the first page exists, so every document in this context — including
+  // the ones a learn run navigates to later — has the analyzer's DOM helpers.
+  await addDomHelpers(context);
+
   const page = await context.newPage();
   page.setDefaultTimeout(options.timeout ?? DEFAULT_TIMEOUT);
   await page.goto(options.url, {

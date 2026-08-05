@@ -1,4 +1,5 @@
 import type { Page } from "playwright";
+import type { DomHelpers } from "../browser/dom-helpers.js";
 
 /**
  * A normalized view of every interactive element on a page.
@@ -110,58 +111,7 @@ export async function extractElements(page: Page): Promise<NormalizedElement[]> 
         return null;
       }
 
-      /** Prefer id, then a test id, then a positional path. */
-      function cssPathOf(el: Element): string {
-        const id = el.getAttribute("id");
-        if (id && document.querySelectorAll(`[id="${id}"]`).length === 1) {
-          return `#${id}`;
-        }
-        const testId = el.getAttribute("data-testid");
-        if (testId) return `[data-testid="${testId}"]`;
-
-        const parts: string[] = [];
-        let node: Element | null = el;
-        while (node && node.nodeType === 1 && parts.length < 8) {
-          const tag = node.tagName.toLowerCase();
-          if (tag === "html" || tag === "body") break;
-          const parent: Element | null = node.parentElement;
-          if (!parent) {
-            parts.unshift(tag);
-            break;
-          }
-          const sameTag = Array.prototype.filter.call(
-            parent.children,
-            (c: Element) => c.tagName === node!.tagName,
-          ) as Element[];
-          parts.unshift(
-            sameTag.length > 1
-              ? `${tag}:nth-of-type(${sameTag.indexOf(node) + 1})`
-              : tag,
-          );
-          node = parent;
-        }
-        return parts.join(" > ");
-      }
-
-      function landmarkOf(el: Element): string | null {
-        const TAGS = ["nav", "header", "footer", "main", "aside"];
-        const ROLES: Record<string, string> = {
-          navigation: "nav",
-          banner: "header",
-          contentinfo: "footer",
-          main: "main",
-          complementary: "aside",
-        };
-        let node: Element | null = el;
-        while (node) {
-          const tag = node.tagName.toLowerCase();
-          if (TAGS.indexOf(tag) !== -1) return tag;
-          const role = node.getAttribute("role");
-          if (role && ROLES[role]) return ROLES[role]!;
-          node = node.parentElement;
-        }
-        return null;
-      }
+      const wg: DomHelpers = window.__wgraph;
 
       function formOf(el: Element): { method: string; action: string } | null {
         const form = el.closest("form");
@@ -209,9 +159,9 @@ export async function extractElements(page: Page): Promise<NormalizedElement[]> 
             box.width > 0 || box.height > 0
               ? { x: box.x, y: box.y, width: box.width, height: box.height }
               : null,
-          cssPath: cssPathOf(el),
+          cssPath: wg.cssPathOf(el, { preferTestId: true }),
           form: formOf(el),
-          landmark: landmarkOf(el),
+          landmark: wg.landmarkOf(el),
           classes: Array.prototype.slice.call(el.classList) as string[],
         });
       }

@@ -1,4 +1,5 @@
 import type { Page } from "playwright";
+import type { DomHelpers } from "../browser/dom-helpers.js";
 
 /**
  * Phase 3: find repeating structures.
@@ -47,34 +48,7 @@ const LANDMARKS = ["nav", "header", "footer"];
 export async function findRepetition(page: Page): Promise<RepetitionCluster[]> {
   return await page.evaluate(
     ({ minItems, maxClusters, minAreaShare, landmarks }) => {
-      function cssPathOf(el: Element): string {
-        const id = el.getAttribute("id");
-        if (id && document.querySelectorAll(`[id="${id}"]`).length === 1) {
-          return `#${id}`;
-        }
-        const parts: string[] = [];
-        let node: Element | null = el;
-        while (node && node.nodeType === 1 && parts.length < 8) {
-          const tag = node.tagName.toLowerCase();
-          if (tag === "html" || tag === "body") break;
-          const parent: Element | null = node.parentElement;
-          if (!parent) {
-            parts.unshift(tag);
-            break;
-          }
-          const sameTag = Array.prototype.filter.call(
-            parent.children,
-            (c: Element) => c.tagName === node!.tagName,
-          ) as Element[];
-          parts.unshift(
-            sameTag.length > 1
-              ? `${tag}:nth-of-type(${sameTag.indexOf(node) + 1})`
-              : tag,
-          );
-          node = parent;
-        }
-        return parts.join(" > ");
-      }
+      const wg: DomHelpers = window.__wgraph;
 
       /** Tag + classes + child tag sequence. Deliberately ignores text. */
       function signatureOf(el: Element): string {
@@ -88,46 +62,9 @@ export async function findRepetition(page: Page): Promise<RepetitionCluster[]> {
         return `${el.tagName.toLowerCase()}|${classes}|${children}`;
       }
 
-      /** A short selector from `root` down to `target`. */
-      function relativePath(root: Element, target: Element): string {
-        const parts: string[] = [];
-        let node: Element | null = target;
-        while (node && node !== root && parts.length < 6) {
-          const tag = node.tagName.toLowerCase();
-          const parent: Element | null = node.parentElement;
-          if (!parent) break;
-          const sameTag = Array.prototype.filter.call(
-            parent.children,
-            (c: Element) => c.tagName === node!.tagName,
-          ) as Element[];
-          parts.unshift(
-            sameTag.length > 1
-              ? `${tag}:nth-of-type(${sameTag.indexOf(node) + 1})`
-              : tag,
-          );
-          node = parent;
-        }
-        return parts.join(" > ");
-      }
-
       function areaOf(el: Element): number {
         const box = el.getBoundingClientRect();
         return Math.max(0, box.width) * Math.max(0, box.height);
-      }
-
-      /** The nearest navigation landmark above this element, if any. */
-      function landmarkOf(el: Element): string | null {
-        let node: Element | null = el;
-        while (node) {
-          const tag = node.tagName.toLowerCase();
-          if (landmarks.indexOf(tag) !== -1) return tag;
-          const role = node.getAttribute("role");
-          if (role === "navigation" || role === "banner" || role === "contentinfo") {
-            return role;
-          }
-          node = node.parentElement;
-        }
-        return null;
       }
 
       const viewportArea = Math.max(
@@ -176,7 +113,9 @@ export async function findRepetition(page: Page): Promise<RepetitionCluster[]> {
           const areaShare = Math.min(1, totalArea / viewportArea);
           const avgItemChildren =
             items.reduce((sum, el) => sum + el.children.length, 0) / items.length;
-          const landmark = landmarkOf(container);
+          // Only the chrome landmarks count here: a list inside <main> is the
+          // page's own content, and excluding it would throw away the answer.
+          const landmark = wg.landmarkOf(container, landmarks);
 
           let exclusionReason: string | null = null;
           if (landmark !== null) {
@@ -190,9 +129,9 @@ export async function findRepetition(page: Page): Promise<RepetitionCluster[]> {
           const richness = Math.min(1, (1 + avgItemChildren) / 3);
 
           clusters.push({
-            containerCss: cssPathOf(container),
+            containerCss: wg.cssPathOf(container),
             itemCss,
-            clickTargetCss: anchor ? relativePath(first, anchor) : null,
+            clickTargetCss: anchor ? wg.relativePath(first, anchor) : null,
             sampleHrefs: hrefs,
             count: items.length,
             areaShare,
