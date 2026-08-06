@@ -1,14 +1,14 @@
 #!/usr/bin/env node
-import { ZodError } from "zod";
-import { GraphNotFoundError, GraphValidationError } from "../graph/store.js";
-import { VocabularyError } from "../graph/mutate.js";
-import { ProbeRefused } from "../analyzer/probe.js";
-import { graphCommand } from "./commands/graph.js";
-import { askCommand, planCommand } from "./commands/plan.js";
-import { analyzeCommand, resumeCommand } from "./commands/analyze.js";
-import { observeCommand } from "./commands/observe.js";
-import { sessionCommand } from "./commands/session.js";
-import { EXIT, UsageError } from "./exit.js";
+import { ZodError } from 'zod';
+import { GraphNotFoundError, GraphValidationError } from '../graph/store.js';
+import { VocabularyError } from '../graph/mutate.js';
+import { ProbeRefused } from '../analyzer/probe.js';
+import { graphCommand } from './commands/graph.js';
+import { askCommand, planCommand } from './commands/plan.js';
+import { analyzeCommand, resumeCommand } from './commands/analyze.js';
+import { observeCommand } from './commands/observe.js';
+import { sessionCommand } from './commands/session.js';
+import { EXIT, UsageError } from './exit.js';
 
 const USAGE = `wgraph — learn a website's structure once, then answer questions from the stored graph.
 
@@ -40,67 +40,69 @@ Graphs live in ~/.claude/website-graphs (override with WGRAPH_HOME).
 Exit codes: 0 ok, 1 error, 2 nothing learned that answers this, 3 approvals pending.`;
 
 async function main(argv: string[]): Promise<number> {
-  const command = argv[0];
-  const rest = argv.slice(1);
+    const command = argv[0];
+    const rest = argv.slice(1);
 
-  switch (command) {
-    case undefined:
-    case "-h":
-    case "--help":
-    case "help":
-      console.log(USAGE);
-      return EXIT.OK;
-    case "analyze":
-      return await analyzeCommand(rest);
-    case "resume":
-      return await resumeCommand(rest);
-    case "observe":
-      return await observeCommand(rest);
-    case "graph":
-      return await graphCommand(rest);
-    case "plan":
-      return await planCommand(rest);
-    case "ask":
-      return await askCommand(rest);
-    case "session":
-      return await sessionCommand(rest);
-    default:
-      throw new UsageError(`Unknown command "${command}".\n\n${USAGE}`);
-  }
+    switch (command) {
+        case undefined:
+        case '-h':
+        case '--help':
+        case 'help':
+            console.log(USAGE);
+            return EXIT.OK;
+        case 'analyze':
+            return await analyzeCommand(rest);
+        case 'resume':
+            return await resumeCommand(rest);
+        case 'observe':
+            return await observeCommand(rest);
+        case 'graph':
+            return await graphCommand(rest);
+        case 'plan':
+            return await planCommand(rest);
+        case 'ask':
+            return await askCommand(rest);
+        case 'session':
+            return await sessionCommand(rest);
+        default:
+            throw new UsageError(`Unknown command "${command}".\n\n${USAGE}`);
+    }
 }
 
 main(process.argv.slice(2))
-  .then((code) => {
-    process.exitCode = code;
-  })
-  .catch((err: unknown) => {
-    process.exitCode = report(err);
-  });
+    .then((code) => {
+        process.exitCode = code;
+    })
+    .catch((err: unknown) => {
+        process.exitCode = report(err);
+    });
 
 function report(err: unknown): number {
-  if (err instanceof UsageError) {
-    console.error(err.message);
-    return EXIT.ERROR;
-  }
-  if (err instanceof GraphNotFoundError) {
-    console.error(err.message);
-    return EXIT.GAP;
-  }
-  if (err instanceof ProbeRefused) {
-    console.error(err.message);
-    return EXIT.PENDING_APPROVAL;
-  }
-  if (err instanceof GraphValidationError || err instanceof VocabularyError) {
-    console.error(err.message);
-    return EXIT.ERROR;
-  }
-  if (err instanceof ZodError) {
-    console.error("Invalid input:");
-    for (const issue of err.issues) {
-      console.error(`  ${issue.path.join(".") || "(root)"}: ${issue.message}`);
+    if (err instanceof UsageError) {
+        console.error(err.message);
+        return EXIT.ERROR;
     }
+    if (err instanceof GraphNotFoundError) {
+        console.error(err.message);
+        return EXIT.GAP;
+    }
+    if (err instanceof ProbeRefused) {
+        console.error(err.message);
+        return EXIT.PENDING_APPROVAL;
+    }
+    if (err instanceof GraphValidationError || err instanceof VocabularyError) {
+        console.error(err.message);
+        return EXIT.ERROR;
+    }
+    if (err instanceof ZodError) {
+        console.error('Invalid input:');
+        for (const issue of err.issues) {
+            console.error(
+                `  ${issue.path.join('.') || '(root)'}: ${issue.message}`,
+            );
+        }
+        return EXIT.ERROR;
+    }
+    console.error(err instanceof Error ? err.message : String(err));
     return EXIT.ERROR;
-  }
-  console.error(err instanceof Error ? err.message : String(err));
-  return EXIT.ERROR;
 }

@@ -104,12 +104,12 @@ Anything genuinely destructive — buy, checkout, delete, log out, unsubscribe, 
 
 ## Exit codes
 
-| Code | Meaning | What to do |
-|---|---|---|
-| 0 | Success | Answer normally |
-| 1 | Error | Report it; the message says what went wrong |
-| 2 | Nothing learned that answers this | Say what is missing, offer to learn more |
-| 3 | Approvals pending | Stop, list them, ask the user |
+| Code | Meaning                           | What to do                                  |
+| ---- | --------------------------------- | ------------------------------------------- |
+| 0    | Success                           | Answer normally                             |
+| 1    | Error                             | Report it; the message says what went wrong |
+| 2    | Nothing learned that answers this | Say what is missing, offer to learn more    |
+| 3    | Approvals pending                 | Stop, list them, ask the user               |
 
 ## Never
 

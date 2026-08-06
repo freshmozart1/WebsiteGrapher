@@ -2,7 +2,7 @@
 
 Learns how a website is **built and navigated**, once, and answers questions about it from a stored graph — without opening a browser again.
 
-It does not extract content. The graph holds pages, components, actions and field *positions*. Not a single price or product name goes into it, and a test asserts that.
+It does not extract content. The graph holds pages, components, actions and field _positions_. Not a single price or product name goes into it, and a test asserts that.
 
 ```
 $ wgraph analyze https://books.toscrape.com
@@ -64,16 +64,16 @@ Budgets cap pages, probes and wall-clock; `robots.txt` is honoured; every run us
 
 ## Commands
 
-| | |
-|---|---|
-| `wgraph analyze <url>` | Learn a site (opens a browser) |
-| `wgraph resume <domain> --approve <ids>` | Continue after approving probes |
-| `wgraph observe <url> --json --fields` | One page, fully described, no decisions taken |
-| `wgraph ask <domain> "<question>"` | Answer from the graph |
-| `wgraph plan <domain> --field <name>` | Route to a named field |
-| `wgraph graph show <domain> [--vocabulary]` | Inspect what was learned |
-| `wgraph graph validate <domain>` | Check the graph is sound |
-| `wgraph graph apply <domain> --file -` | Apply a JSON patch |
+|                                             |                                               |
+| ------------------------------------------- | --------------------------------------------- |
+| `wgraph analyze <url>`                      | Learn a site (opens a browser)                |
+| `wgraph resume <domain> --approve <ids>`    | Continue after approving probes               |
+| `wgraph observe <url> --json --fields`      | One page, fully described, no decisions taken |
+| `wgraph ask <domain> "<question>"`          | Answer from the graph                         |
+| `wgraph plan <domain> --field <name>`       | Route to a named field                        |
+| `wgraph graph show <domain> [--vocabulary]` | Inspect what was learned                      |
+| `wgraph graph validate <domain>`            | Check the graph is sound                      |
+| `wgraph graph apply <domain> --file -`      | Apply a JSON patch                            |
 
 Exit codes: `0` ok, `1` error, `2` nothing learned that answers this, `3` approvals pending.
 

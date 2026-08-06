@@ -1,4 +1,4 @@
-import type { BrowserContext } from "playwright";
+import type { BrowserContext } from 'playwright';
 
 /**
  * The DOM helpers every `page.evaluate` in the analyzer shares.
@@ -20,40 +20,40 @@ import type { BrowserContext } from "playwright";
  * nothing that perturbs the structure these analyzers are there to measure.
  */
 export interface DomHelpers {
-  /**
-   * A selector that identifies `el` from the document root: its id when that
-   * is unique, else a positional path capped at 8 levels.
-   *
-   * `preferTestId` adds a `data-testid` shortcut between the two. Only the
-   * element extractor asks for it, because a test id is the stable hook for a
-   * control but says nothing about where a container or a field sits.
-   */
-  cssPathOf(el: Element, options?: { preferTestId?: boolean }): string;
+    /**
+     * A selector that identifies `el` from the document root: its id when that
+     * is unique, else a positional path capped at 8 levels.
+     *
+     * `preferTestId` adds a `data-testid` shortcut between the two. Only the
+     * element extractor asks for it, because a test id is the stable hook for a
+     * control but says nothing about where a container or a field sits.
+     */
+    cssPathOf(el: Element, options?: { preferTestId?: boolean }): string;
 
-  /** A short selector from `root` down to `target`, capped at 6 levels. */
-  relativePath(root: Element, target: Element): string;
+    /** A short selector from `root` down to `target`, capped at 6 levels. */
+    relativePath(root: Element, target: Element): string;
 
-  /**
-   * The nearest landmark ancestor, as a tag name — an explicit `role` is
-   * normalized to the tag it stands for, so a caller never has to handle
-   * "navigation" and "nav" separately.
-   *
-   * `tags` narrows which landmarks count and defaults to all of them. Passing
-   * a subset skips the rest of the ancestor walk rather than stopping at it,
-   * which is what a caller asking "is this inside the site chrome?" means: a
-   * list inside `<aside>` inside `<footer>` is still in the footer.
-   */
-  landmarkOf(el: Element, tags?: readonly string[]): string | null;
+    /**
+     * The nearest landmark ancestor, as a tag name — an explicit `role` is
+     * normalized to the tag it stands for, so a caller never has to handle
+     * "navigation" and "nav" separately.
+     *
+     * `tags` narrows which landmarks count and defaults to all of them. Passing
+     * a subset skips the rest of the ancestor walk rather than stopping at it,
+     * which is what a caller asking "is this inside the site chrome?" means: a
+     * list inside `<aside>` inside `<footer>` is still in the footer.
+     */
+    landmarkOf(el: Element, tags?: readonly string[]): string | null;
 }
 
 declare global {
-  interface Window {
-    /**
-     * Installed by `addDomHelpers` on every context `startRun` opens. Analyzer
-     * `page.evaluate` callbacks may assume it is present.
-     */
-    __wgraph: DomHelpers;
-  }
+    interface Window {
+        /**
+         * Installed by `addDomHelpers` on every context `startRun` opens. Analyzer
+         * `page.evaluate` callbacks may assume it is present.
+         */
+        __wgraph: DomHelpers;
+    }
 }
 
 /**
@@ -61,86 +61,89 @@ declare global {
  * no imports, no references to anything outside its own body.
  */
 function installDomHelpers(): void {
-  const LANDMARK_TAGS = ["nav", "header", "footer", "main", "aside"];
-  const LANDMARK_ROLES: Record<string, string> = {
-    navigation: "nav",
-    banner: "header",
-    contentinfo: "footer",
-    main: "main",
-    complementary: "aside",
-  };
+    const LANDMARK_TAGS = ['nav', 'header', 'footer', 'main', 'aside'];
+    const LANDMARK_ROLES: Record<string, string> = {
+        navigation: 'nav',
+        banner: 'header',
+        contentinfo: 'footer',
+        main: 'main',
+        complementary: 'aside',
+    };
 
-  /** One step of a positional path: `div`, or `div:nth-of-type(3)` when the
-   *  tag alone would not tell this child from its siblings. */
-  function segmentFor(node: Element, parent: Element): string {
-    const tag = node.tagName.toLowerCase();
-    const sameTag = Array.prototype.filter.call(
-      parent.children,
-      (c: Element) => c.tagName === node.tagName,
-    ) as Element[];
-    return sameTag.length > 1
-      ? `${tag}:nth-of-type(${sameTag.indexOf(node) + 1})`
-      : tag;
-  }
-
-  function cssPathOf(el: Element, options?: { preferTestId?: boolean }): string {
-    const id = el.getAttribute("id");
-    if (id && document.querySelectorAll(`[id="${id}"]`).length === 1) {
-      return `#${id}`;
+    /** One step of a positional path: `div`, or `div:nth-of-type(3)` when the
+     *  tag alone would not tell this child from its siblings. */
+    function segmentFor(node: Element, parent: Element): string {
+        const tag = node.tagName.toLowerCase();
+        const sameTag = Array.prototype.filter.call(
+            parent.children,
+            (c: Element) => c.tagName === node.tagName,
+        ) as Element[];
+        return sameTag.length > 1
+            ? `${tag}:nth-of-type(${sameTag.indexOf(node) + 1})`
+            : tag;
     }
 
-    if (options && options.preferTestId) {
-      const testId = el.getAttribute("data-testid");
-      if (testId) return `[data-testid="${testId}"]`;
+    function cssPathOf(
+        el: Element,
+        options?: { preferTestId?: boolean },
+    ): string {
+        const id = el.getAttribute('id');
+        if (id && document.querySelectorAll(`[id="${id}"]`).length === 1) {
+            return `#${id}`;
+        }
+
+        if (options && options.preferTestId) {
+            const testId = el.getAttribute('data-testid');
+            if (testId) return `[data-testid="${testId}"]`;
+        }
+
+        const parts: string[] = [];
+        let node: Element | null = el;
+        while (node && node.nodeType === 1 && parts.length < 8) {
+            const tag = node.tagName.toLowerCase();
+            if (tag === 'html' || tag === 'body') break;
+            const parent: Element | null = node.parentElement;
+            if (!parent) {
+                parts.unshift(tag);
+                break;
+            }
+            parts.unshift(segmentFor(node, parent));
+            node = parent;
+        }
+        return parts.join(' > ');
     }
 
-    const parts: string[] = [];
-    let node: Element | null = el;
-    while (node && node.nodeType === 1 && parts.length < 8) {
-      const tag = node.tagName.toLowerCase();
-      if (tag === "html" || tag === "body") break;
-      const parent: Element | null = node.parentElement;
-      if (!parent) {
-        parts.unshift(tag);
-        break;
-      }
-      parts.unshift(segmentFor(node, parent));
-      node = parent;
+    function relativePath(root: Element, target: Element): string {
+        const parts: string[] = [];
+        let node: Element | null = target;
+        while (node && node !== root && parts.length < 6) {
+            const parent: Element | null = node.parentElement;
+            if (!parent) break;
+            parts.unshift(segmentFor(node, parent));
+            node = parent;
+        }
+        return parts.join(' > ');
     }
-    return parts.join(" > ");
-  }
 
-  function relativePath(root: Element, target: Element): string {
-    const parts: string[] = [];
-    let node: Element | null = target;
-    while (node && node !== root && parts.length < 6) {
-      const parent: Element | null = node.parentElement;
-      if (!parent) break;
-      parts.unshift(segmentFor(node, parent));
-      node = parent;
+    function landmarkOf(el: Element, tags?: readonly string[]): string | null {
+        const wanted = tags ?? LANDMARK_TAGS;
+        let node: Element | null = el;
+        while (node) {
+            const tag = node.tagName.toLowerCase();
+            if (wanted.indexOf(tag) !== -1) return tag;
+            const role = node.getAttribute('role');
+            const mapped = role ? LANDMARK_ROLES[role] : undefined;
+            if (mapped && wanted.indexOf(mapped) !== -1) return mapped;
+            node = node.parentElement;
+        }
+        return null;
     }
-    return parts.join(" > ");
-  }
 
-  function landmarkOf(el: Element, tags?: readonly string[]): string | null {
-    const wanted = tags ?? LANDMARK_TAGS;
-    let node: Element | null = el;
-    while (node) {
-      const tag = node.tagName.toLowerCase();
-      if (wanted.indexOf(tag) !== -1) return tag;
-      const role = node.getAttribute("role");
-      const mapped = role ? LANDMARK_ROLES[role] : undefined;
-      if (mapped && wanted.indexOf(mapped) !== -1) return mapped;
-      node = node.parentElement;
-    }
-    return null;
-  }
-
-  // Non-enumerable, so the page sees as little of us as possible.
-  Object.defineProperty(window, "__wgraph", {
-    value: { cssPathOf, relativePath, landmarkOf },
-    configurable: true,
-  });
+    // Non-enumerable, so the page sees as little of us as possible.
+    Object.defineProperty(window, '__wgraph', {
+        value: { cssPathOf, relativePath, landmarkOf },
+        configurable: true,
+    });
 }
 
 /**
@@ -149,5 +152,5 @@ function installDomHelpers(): void {
  * place in the codebase that builds a context, and it is where this belongs.
  */
 export async function addDomHelpers(context: BrowserContext): Promise<void> {
-  await context.addInitScript(installDomHelpers);
+    await context.addInitScript(installDomHelpers);
 }

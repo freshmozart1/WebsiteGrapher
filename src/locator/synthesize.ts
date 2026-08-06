@@ -1,7 +1,10 @@
-import type { Page } from "playwright";
-import { RESOLUTION_ORDER, type LocatorDefinition } from "../graph/schema.js";
-import { accessibleName, type NormalizedElement } from "../analyzer/elements.js";
-import { locatorForHint } from "./resolve.js";
+import type { Page } from 'playwright';
+import { RESOLUTION_ORDER, type LocatorDefinition } from '../graph/schema.js';
+import {
+    accessibleName,
+    type NormalizedElement,
+} from '../analyzer/elements.js';
+import { locatorForHint } from './resolve.js';
 
 /**
  * Build a LocatorDefinition for an observed element, keeping every hint that
@@ -12,19 +15,20 @@ import { locatorForHint } from "./resolve.js";
  * without re-learning the page.
  */
 export function proposeLocator(el: NormalizedElement): LocatorDefinition {
-  const def: LocatorDefinition = {};
-  const name = accessibleName(el);
+    const def: LocatorDefinition = {};
+    const name = accessibleName(el);
 
-  if (el.role) {
-    def.role = el.role;
-    if (name) def.name = name;
-  }
-  if (el.label) def.label = el.label;
-  if (el.placeholder) def.placeholder = el.placeholder;
-  if (el.text && el.text.length <= 40 && el.tag !== "input") def.text = el.text;
-  if (el.cssPath) def.css = el.cssPath;
+    if (el.role) {
+        def.role = el.role;
+        if (name) def.name = name;
+    }
+    if (el.label) def.label = el.label;
+    if (el.placeholder) def.placeholder = el.placeholder;
+    if (el.text && el.text.length <= 40 && el.tag !== 'input')
+        def.text = el.text;
+    if (el.cssPath) def.css = el.cssPath;
 
-  return def;
+    return def;
 }
 
 /**
@@ -36,41 +40,41 @@ export function proposeLocator(el: NormalizedElement): LocatorDefinition {
  * element later.
  */
 export async function verifyLocator(
-  page: Page,
-  proposed: LocatorDefinition,
+    page: Page,
+    proposed: LocatorDefinition,
 ): Promise<LocatorDefinition | null> {
-  const kept: LocatorDefinition = {};
-  let anyUnique = false;
+    const kept: LocatorDefinition = {};
+    let anyUnique = false;
 
-  for (const hint of RESOLUTION_ORDER) {
-    const locator = locatorForHint(page, proposed, hint);
-    if (!locator) continue;
-    let count: number;
-    try {
-      count = await locator.count();
-    } catch {
-      continue;
+    for (const hint of RESOLUTION_ORDER) {
+        const locator = locatorForHint(page, proposed, hint);
+        if (!locator) continue;
+        let count: number;
+        try {
+            count = await locator.count();
+        } catch {
+            continue;
+        }
+        if (count !== 1) continue;
+
+        anyUnique = true;
+        if (hint === 'role') {
+            kept.role = proposed.role;
+            if (proposed.name) kept.name = proposed.name;
+        } else {
+            kept[hint] = proposed[hint];
+        }
     }
-    if (count !== 1) continue;
 
-    anyUnique = true;
-    if (hint === "role") {
-      kept.role = proposed.role;
-      if (proposed.name) kept.name = proposed.name;
-    } else {
-      kept[hint] = proposed[hint];
-    }
-  }
-
-  return anyUnique ? kept : null;
+    return anyUnique ? kept : null;
 }
 
 /** Propose then verify, in one step. */
 export async function synthesizeLocator(
-  page: Page,
-  el: NormalizedElement,
+    page: Page,
+    el: NormalizedElement,
 ): Promise<LocatorDefinition | null> {
-  return await verifyLocator(page, proposeLocator(el));
+    return await verifyLocator(page, proposeLocator(el));
 }
 
 /**
@@ -78,11 +82,13 @@ export async function synthesizeLocator(
  * where a text or accessible-name hint would pin the field to one item's
  * content.
  */
-export function proposeStructuralLocator(el: NormalizedElement): LocatorDefinition {
-  const def: LocatorDefinition = {};
-  if (el.role) def.role = el.role;
-  if (el.label) def.label = el.label;
-  if (el.placeholder) def.placeholder = el.placeholder;
-  if (el.cssPath) def.css = el.cssPath;
-  return def;
+export function proposeStructuralLocator(
+    el: NormalizedElement,
+): LocatorDefinition {
+    const def: LocatorDefinition = {};
+    if (el.role) def.role = el.role;
+    if (el.label) def.label = el.label;
+    if (el.placeholder) def.placeholder = el.placeholder;
+    if (el.cssPath) def.css = el.cssPath;
+    return def;
 }

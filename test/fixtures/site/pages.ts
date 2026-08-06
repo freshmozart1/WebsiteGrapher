@@ -8,28 +8,76 @@
  */
 
 export interface Product {
-  id: number;
-  title: string;
-  price: string;
-  category: "fiction" | "tech";
-  rating: number;
-  stock: number;
-  blurb: string;
+    id: number;
+    title: string;
+    price: string;
+    category: 'fiction' | 'tech';
+    rating: number;
+    stock: number;
+    blurb: string;
 }
 
 export const PRODUCTS: Product[] = [
-  { id: 1, title: "The Silent Harbour", price: "£12.99", category: "fiction", rating: 4, stock: 7, blurb: "A slow novel about a lighthouse keeper who stops writing letters." },
-  { id: 2, title: "Compilers in Anger", price: "£48.50", category: "tech", rating: 5, stock: 2, blurb: "Field notes from a decade of shipping type checkers that nobody asked for." },
-  { id: 3, title: "Salt and Signal", price: "£9.25", category: "fiction", rating: 3, stock: 0, blurb: "Short stories set along a coastline that keeps rearranging itself." },
-  { id: 4, title: "Distributed Regret", price: "£61.00", category: "tech", rating: 4, stock: 11, blurb: "On consensus protocols, and the meetings they were meant to replace." },
-  { id: 5, title: "The Cartographer's Error", price: "£15.75", category: "fiction", rating: 5, stock: 4, blurb: "A mapmaker draws an island that is not there, and then it is." },
-  { id: 6, title: "Garbage Collection", price: "£33.40", category: "tech", rating: 2, stock: 1, blurb: "Memory management explained through the medium of household chores." },
+    {
+        id: 1,
+        title: 'The Silent Harbour',
+        price: '£12.99',
+        category: 'fiction',
+        rating: 4,
+        stock: 7,
+        blurb: 'A slow novel about a lighthouse keeper who stops writing letters.',
+    },
+    {
+        id: 2,
+        title: 'Compilers in Anger',
+        price: '£48.50',
+        category: 'tech',
+        rating: 5,
+        stock: 2,
+        blurb: 'Field notes from a decade of shipping type checkers that nobody asked for.',
+    },
+    {
+        id: 3,
+        title: 'Salt and Signal',
+        price: '£9.25',
+        category: 'fiction',
+        rating: 3,
+        stock: 0,
+        blurb: 'Short stories set along a coastline that keeps rearranging itself.',
+    },
+    {
+        id: 4,
+        title: 'Distributed Regret',
+        price: '£61.00',
+        category: 'tech',
+        rating: 4,
+        stock: 11,
+        blurb: 'On consensus protocols, and the meetings they were meant to replace.',
+    },
+    {
+        id: 5,
+        title: "The Cartographer's Error",
+        price: '£15.75',
+        category: 'fiction',
+        rating: 5,
+        stock: 4,
+        blurb: 'A mapmaker draws an island that is not there, and then it is.',
+    },
+    {
+        id: 6,
+        title: 'Garbage Collection',
+        price: '£33.40',
+        category: 'tech',
+        rating: 2,
+        stock: 1,
+        blurb: 'Memory management explained through the medium of household chores.',
+    },
 ];
 
 const PAGE_SIZE = 3;
 
-function shell(title: string, body: string, head = ""): string {
-  return `<!doctype html>
+function shell(title: string, body: string, head = ''): string {
+    return `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -63,12 +111,12 @@ function shell(title: string, body: string, head = ""): string {
 }
 
 function card(p: Product): string {
-  return `
+    return `
     <li class="product-card" data-category="${p.category}" data-price="${p.price.slice(1)}">
       <img class="thumb" src="/img/${p.id}.svg" alt="${p.title} cover">
       <h3><a href="/product/${p.id}.html">${p.title}</a></h3>
       <p class="price">${p.price}</p>
-      <p class="stock">${p.stock > 0 ? `In stock (${p.stock})` : "Out of stock"}</p>
+      <p class="stock">${p.stock > 0 ? `In stock (${p.stock})` : 'Out of stock'}</p>
     </li>`;
 }
 
@@ -110,7 +158,7 @@ const LIST_SCRIPT = `
 </script>`;
 
 function controls(): string {
-  return `
+    return `
     <form class="controls" method="get" action="/products.html">
       <label for="category">Category</label>
       <select id="category" name="category">
@@ -134,57 +182,57 @@ function controls(): string {
 }
 
 function pager(page: number, total: number): string {
-  const pages = Math.ceil(total / PAGE_SIZE);
-  const links: string[] = [];
-  for (let n = 1; n <= pages; n++) {
-    links.push(
-      n === page
-        ? `<span class="current" aria-current="page">${n}</span>`
-        : `<a href="/products.html?page=${n}">${n}</a>`,
-    );
-  }
-  return `
+    const pages = Math.ceil(total / PAGE_SIZE);
+    const links: string[] = [];
+    for (let n = 1; n <= pages; n++) {
+        links.push(
+            n === page
+                ? `<span class="current" aria-current="page">${n}</span>`
+                : `<a href="/products.html?page=${n}">${n}</a>`,
+        );
+    }
+    return `
     <nav class="pager" aria-label="Pagination">
-      ${page > 1 ? `<a class="prev" href="/products.html?page=${page - 1}">Previous</a>` : ""}
-      ${links.join(" ")}
-      ${page < pages ? `<a class="next" href="/products.html?page=${page + 1}">Next</a>` : ""}
+      ${page > 1 ? `<a class="prev" href="/products.html?page=${page - 1}">Previous</a>` : ''}
+      ${links.join(' ')}
+      ${page < pages ? `<a class="next" href="/products.html?page=${page + 1}">Next</a>` : ''}
     </nav>`;
 }
 
 export function homePage(): string {
-  return shell(
-    "Fixture Bookshop",
-    `
+    return shell(
+        'Fixture Bookshop',
+        `
     <h1>Fixture Bookshop</h1>
     <p>A small shop that exists only to be analyzed.</p>
     <p><a class="cta" href="/products.html">Browse all products</a></p>`,
-  );
+    );
 }
 
 export function productsPage(page = 1): string {
-  const start = (page - 1) * PAGE_SIZE;
-  const visible = PRODUCTS.slice(start, start + PAGE_SIZE);
-  return shell(
-    "Products — Fixture Bookshop",
-    `
+    const start = (page - 1) * PAGE_SIZE;
+    const visible = PRODUCTS.slice(start, start + PAGE_SIZE);
+    return shell(
+        'Products — Fixture Bookshop',
+        `
     <h1>Products</h1>
     ${controls()}
-    <ol class="products">${visible.map(card).join("")}</ol>
+    <ol class="products">${visible.map(card).join('')}</ol>
     ${pager(page, PRODUCTS.length)}`,
-    LIST_SCRIPT,
-  );
+        LIST_SCRIPT,
+    );
 }
 
 /** Same list, revealed by a button instead of page links. */
 export function loadMorePage(): string {
-  return shell(
-    "All products — Fixture Bookshop",
-    `
+    return shell(
+        'All products — Fixture Bookshop',
+        `
     <h1>All products</h1>
-    <ol class="products">${PRODUCTS.slice(0, 3).map(card).join("")}</ol>
+    <ol class="products">${PRODUCTS.slice(0, 3).map(card).join('')}</ol>
     <button id="load-more" type="button">Load more</button>
-    <template id="rest">${PRODUCTS.slice(3).map(card).join("")}</template>`,
-    `<script>
+    <template id="rest">${PRODUCTS.slice(3).map(card).join('')}</template>`,
+        `<script>
       document.addEventListener('DOMContentLoaded', function () {
         document.getElementById('load-more').addEventListener('click', function () {
           var tpl = document.getElementById('rest');
@@ -193,19 +241,19 @@ export function loadMorePage(): string {
         });
       });
     </script>`,
-  );
+    );
 }
 
 /** Same list again, revealed by scrolling. */
 export function infiniteScrollPage(): string {
-  return shell(
-    "Feed — Fixture Bookshop",
-    `
+    return shell(
+        'Feed — Fixture Bookshop',
+        `
     <h1>Feed</h1>
-    <ol class="products">${PRODUCTS.slice(0, 3).map(card).join("")}</ol>
+    <ol class="products">${PRODUCTS.slice(0, 3).map(card).join('')}</ol>
     <div style="height: 1400px"></div>
-    <template id="rest">${PRODUCTS.slice(3).map(card).join("")}</template>`,
-    `<script>
+    <template id="rest">${PRODUCTS.slice(3).map(card).join('')}</template>`,
+        `<script>
       var loaded = false;
       window.addEventListener('scroll', function () {
         if (loaded) return;
@@ -216,19 +264,19 @@ export function infiniteScrollPage(): string {
         }
       });
     </script>`,
-  );
+    );
 }
 
 export function detailPage(product: Product): string {
-  return shell(
-    `${product.title} — Fixture Bookshop`,
-    `
+    return shell(
+        `${product.title} — Fixture Bookshop`,
+        `
     <article class="product">
       <div id="gallery"><img src="/img/${product.id}.svg" alt="${product.title} cover"></div>
       <h1>${product.title}</h1>
       <p class="price">${product.price}</p>
-      <p class="rating" data-rating="${product.rating}">${"★".repeat(product.rating)}${"☆".repeat(5 - product.rating)}</p>
-      <p class="availability">${product.stock > 0 ? `In stock (${product.stock} available)` : "Out of stock"}</p>
+      <p class="rating" data-rating="${product.rating}">${'★'.repeat(product.rating)}${'☆'.repeat(5 - product.rating)}</p>
+      <p class="availability">${product.stock > 0 ? `In stock (${product.stock} available)` : 'Out of stock'}</p>
       <h2 id="description-heading">Description</h2>
       <p class="description">${product.blurb}</p>
       <table class="specs">
@@ -238,27 +286,27 @@ export function detailPage(product: Product): string {
       <button type="button" class="buy">Buy now</button>
       <a class="back" href="/products.html">Back to products</a>
     </article>`,
-  );
+    );
 }
 
 export function searchPage(): string {
-  return shell(
-    "Search — Fixture Bookshop",
-    `
+    return shell(
+        'Search — Fixture Bookshop',
+        `
     <h1>Search</h1>
     <form method="get" action="/products.html">
       <label for="sq">What are you looking for?</label>
       <input id="sq" name="q" type="search" placeholder="Title or author">
       <button type="submit">Search</button>
     </form>`,
-  );
+    );
 }
 
 /** A POST form: every control inside it must be blocked from probing. */
 export function contactPage(): string {
-  return shell(
-    "Contact — Fixture Bookshop",
-    `
+    return shell(
+        'Contact — Fixture Bookshop',
+        `
     <h1>Contact us</h1>
     <form method="post" action="/contact">
       <label for="email">Email</label>
@@ -268,29 +316,32 @@ export function contactPage(): string {
       <label for="subscribe"><input id="subscribe" name="subscribe" type="checkbox"> Subscribe to the newsletter</label>
       <button type="submit">Send message</button>
     </form>`,
-  );
+    );
 }
 
 /** Controls whose labels alone should keep the learner away from them. */
 export function accountPage(): string {
-  return shell(
-    "Account — Fixture Bookshop",
-    `
+    return shell(
+        'Account — Fixture Bookshop',
+        `
     <h1>Your account</h1>
     <button type="button" class="danger">Delete my account</button>
     <button type="button">Unsubscribe</button>
     <a href="/logout">Log out</a>
     <a href="/checkout">Proceed to checkout</a>
     <a href="https://example.org/partner">Partner site</a>`,
-  );
+    );
 }
 
 export function aboutPage(): string {
-  return shell("About — Fixture Bookshop", `<h1>About</h1><p>Nothing to see.</p>`);
+    return shell(
+        'About — Fixture Bookshop',
+        `<h1>About</h1><p>Nothing to see.</p>`,
+    );
 }
 
 function coverSvg(product: Product): string {
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="120" height="160" viewBox="0 0 120 160">
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="120" height="160" viewBox="0 0 120 160">
   <rect width="120" height="160" fill="#eef"/>
   <text x="60" y="80" text-anchor="middle" font-size="12">${product.id}</text>
 </svg>`;
@@ -298,27 +349,27 @@ function coverSvg(product: Product): string {
 
 /** Every path the fixture server answers. */
 export function routes(): Map<string, { body: string; type: string }> {
-  const map = new Map<string, { body: string; type: string }>();
-  const html = (body: string) => ({ body, type: "text/html; charset=utf-8" });
+    const map = new Map<string, { body: string; type: string }>();
+    const html = (body: string) => ({ body, type: 'text/html; charset=utf-8' });
 
-  map.set("/", html(homePage()));
-  map.set("/index.html", html(homePage()));
-  map.set("/products.html", html(productsPage(1)));
-  map.set("/load-more.html", html(loadMorePage()));
-  map.set("/feed.html", html(infiniteScrollPage()));
-  map.set("/search.html", html(searchPage()));
-  map.set("/contact.html", html(contactPage()));
-  map.set("/account.html", html(accountPage()));
-  map.set("/about.html", html(aboutPage()));
+    map.set('/', html(homePage()));
+    map.set('/index.html', html(homePage()));
+    map.set('/products.html', html(productsPage(1)));
+    map.set('/load-more.html', html(loadMorePage()));
+    map.set('/feed.html', html(infiniteScrollPage()));
+    map.set('/search.html', html(searchPage()));
+    map.set('/contact.html', html(contactPage()));
+    map.set('/account.html', html(accountPage()));
+    map.set('/about.html', html(aboutPage()));
 
-  for (const product of PRODUCTS) {
-    map.set(`/product/${product.id}.html`, html(detailPage(product)));
-    map.set(`/img/${product.id}.svg`, {
-      body: coverSvg(product),
-      type: "image/svg+xml",
-    });
-  }
-  return map;
+    for (const product of PRODUCTS) {
+        map.set(`/product/${product.id}.html`, html(detailPage(product)));
+        map.set(`/img/${product.id}.svg`, {
+            body: coverSvg(product),
+            type: 'image/svg+xml',
+        });
+    }
+    return map;
 }
 
 export const PAGE_SIZE_FOR_TESTS = PAGE_SIZE;
