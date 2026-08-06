@@ -28,7 +28,7 @@ const postFormRule: ClassifyRule = (signals) =>
               type: 'form',
               confidence: 'high',
               reasons: [
-                  `${signals.postFormCount} POST form(s) with ${signals.inputCount} inputs`,
+                  `${signals.postFormCount} visible POST form(s) with ${signals.inputCount} visible input(s)`,
               ],
           }
         : null;
@@ -96,7 +96,9 @@ const formRule: ClassifyRule = (signals) =>
         ? {
               type: 'form',
               confidence: 'medium',
-              reasons: [`a form with ${signals.inputCount} inputs`],
+              reasons: [
+                  `a visible form with ${signals.inputCount} visible input(s)`,
+              ],
           }
         : null;
 
