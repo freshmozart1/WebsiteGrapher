@@ -118,7 +118,6 @@ describe('learning the fixture site end to end', () => {
         // visited but did not pick as the overview must still be stored as a
         // page, with an edge from the entry page, instead of being silently
         // discarded once the crawl budget paid for the visit.
-        const entryPage = graph.pages.find((p) => p.entry);
         const nonOverviewEdges = graph.edges.filter(
             (e) =>
                 e.sourceNode === 'page-entry' && e.targetNode !== 'page-overview',
@@ -129,7 +128,7 @@ describe('learning the fixture site end to end', () => {
         );
         expect(navPage).toBeDefined();
         expect(navPage?.type).toBe('home');
-        expect(navPage?.id).not.toBe(entryPage?.id);
+        expect(navPage?.id).not.toBe(graph.entryPageId);
     });
 
     it('records the list with its item and click-target locators', async () => {
