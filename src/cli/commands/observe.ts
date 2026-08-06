@@ -6,14 +6,31 @@ import { findFieldCandidates } from '../../analyzer/fields.js';
 import { tierElements } from '../../analyzer/risk.js';
 import { artifactsDir, domainKey } from '../../graph/store.js';
 import { join } from 'node:path';
-import { EXIT, UsageError } from '../exit.js';
+import { EXIT, UsageError, isHelpFlag } from '../exit.js';
 
 /**
  * The agent's window onto a page: everything mechanical that can be said about
  * it, with no decision taken. The draft classification is included and clearly
  * labelled as a draft, so the agent can agree or overrule it.
  */
+
+const OBSERVE_USAGE = `wgraph observe <url> [options]
+
+Describe one page in full, with no decision taken — no graph is written.
+Useful for inspecting what the analyzer sees before trusting its draft
+classification.
+
+Options:
+  --json         Print the full observation as JSON
+  --fields       Also list candidate field locators found on the page
+  --screenshot   Save a screenshot alongside the observation
+  --headed       Show the browser window instead of running headless`;
+
 export async function observeCommand(argv: string[]): Promise<number> {
+    if (isHelpFlag(argv)) {
+        console.log(OBSERVE_USAGE);
+        return EXIT.OK;
+    }
     const { values, positionals } = parseArgs({
         args: argv,
         options: {

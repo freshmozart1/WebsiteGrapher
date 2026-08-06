@@ -3,14 +3,33 @@ import { loadGraph } from '../../graph/store.js';
 import { buildPlan, type PlanTarget } from '../../planner/plan.js';
 import { interpretQuestion } from '../../planner/goals.js';
 import { renderPlan } from '../render.js';
-import { EXIT, UsageError } from '../exit.js';
+import { EXIT, UsageError, isHelpFlag } from '../exit.js';
 import { requireDomain } from './graph.js';
 
 /**
  * `plan` takes an explicit target — this is the path the agent uses, having
  * already decided what the question is about.
  */
+
+const PLAN_USAGE = `wgraph plan <domain> (--field <name> | --goal <id> | --page <id>) [--json]
+
+Route to a target the caller already identified: a field by its semantic
+name, a stored goal by id, or a page by id. Exactly one of the three is
+required.
+
+Options:
+  --field <name>   Route to a field by semantic name
+  --goal <id>      Route to a stored goal by id
+  --page <id>      Route to a page by id
+  --json           Print the plan as JSON
+
+Exit codes: 0 a route was found, 2 the graph holds no route to it.`;
+
 export async function planCommand(argv: string[]): Promise<number> {
+    if (isHelpFlag(argv)) {
+        console.log(PLAN_USAGE);
+        return EXIT.OK;
+    }
     const { values, positionals } = parseArgs({
         args: argv,
         options: {
@@ -50,7 +69,23 @@ export async function planCommand(argv: string[]): Promise<number> {
  * keyword match, not reasoning — it exists so the CLI stands alone. It reports
  * its confidence so a poor guess is visible rather than silently authoritative.
  */
+const ASK_USAGE = `wgraph ask <domain> "<question>" [--json]
+
+Interpret a free-text question with a deterministic keyword match, then
+route to whatever it names — a field, a stored goal, or a page. Reports its
+confidence, so a poor guess is visible rather than silently authoritative.
+
+Options:
+  --json   Print the plan as JSON
+
+Exit codes: 0 a route was found, 2 the question could not be placed or the
+graph holds no route to it.`;
+
 export async function askCommand(argv: string[]): Promise<number> {
+    if (isHelpFlag(argv)) {
+        console.log(ASK_USAGE);
+        return EXIT.OK;
+    }
     const { values, positionals } = parseArgs({
         args: argv,
         options: { json: { type: 'boolean', default: false } },

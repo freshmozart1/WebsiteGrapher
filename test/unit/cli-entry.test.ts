@@ -38,13 +38,10 @@ describe('main', () => {
         expect(printed()).toContain("wgraph — learn a website's structure");
     });
 
-    it.each(['-h', '--help', 'help'])(
-        'prints usage for %s',
-        async (flag) => {
-            expect(await main([flag])).toBe(EXIT.OK);
-            expect(printed()).toContain("wgraph — learn a website's structure");
-        },
-    );
+    it.each(['-h', '--help', 'help'])('prints usage for %s', async (flag) => {
+        expect(await main([flag])).toBe(EXIT.OK);
+        expect(printed()).toContain("wgraph — learn a website's structure");
+    });
 
     it('dispatches to the session command', async () => {
         expect(await main(['session', 'list'])).toBe(EXIT.OK);
@@ -58,6 +55,45 @@ describe('main', () => {
 
     it('rejects an unknown command', async () => {
         await expect(main(['frobnicate'])).rejects.toThrow(UsageError);
+    });
+
+    it.each(['-h', '--help'])(
+        'passes %s through to the "graph" subcommand',
+        async (flag) => {
+            expect(await main(['graph', flag])).toBe(EXIT.OK);
+            expect(printed()).toContain('list');
+            expect(printed()).toContain('apply');
+        },
+    );
+
+    it.each(['-h', '--help'])(
+        'passes %s through to the "session" subcommand',
+        async (flag) => {
+            expect(await main(['session', flag])).toBe(EXIT.OK);
+            expect(printed()).toContain('list');
+            expect(printed()).toContain('clear');
+        },
+    );
+
+    it.each(['-h', '--help'])(
+        'passes %s through to the "analyze" command',
+        async (flag) => {
+            expect(await main(['analyze', flag])).toBe(EXIT.OK);
+            expect(printed()).toContain('wgraph analyze <url>');
+        },
+    );
+
+    it('reproduces the issue: "graph apply --help" resolves instead of throwing', async () => {
+        expect(await main(['graph', 'apply', '--help'])).toBe(EXIT.OK);
+        expect(printed()).toContain('pages');
+        expect(printed()).toContain('components');
+        expect(printed()).toContain('fields');
+        expect(printed()).toContain('edges');
+    });
+
+    it('prints usage for "session clear --help" instead of clearing a session named --help', async () => {
+        expect(await main(['session', 'clear', '--help'])).toBe(EXIT.OK);
+        expect(printed()).toContain('wgraph session clear <name>');
     });
 });
 

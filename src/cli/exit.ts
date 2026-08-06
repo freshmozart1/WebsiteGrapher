@@ -16,3 +16,10 @@ export class UsageError extends Error {
         this.name = 'UsageError';
     }
 }
+
+/** `parseArgs` runs in strict mode and throws on any option it does not know
+ *  about, so `--help`/`-h` must be checked against the raw argv before a
+ *  command calls `parseArgs` — otherwise "--help" itself is the crash. */
+export function isHelpFlag(argv: string[]): boolean {
+    return argv.includes('-h') || argv.includes('--help');
+}
