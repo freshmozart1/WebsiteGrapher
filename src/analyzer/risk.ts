@@ -138,129 +138,165 @@ const SENSITIVE_NAMES = [
     'otp',
 ];
 
+/** One rule in the chain below. Returns null when it does not apply, so the
+ *  next rule gets a turn. */
+type RiskRule = (
+    el: NormalizedElement,
+    label: string,
+    context: { origin: string },
+) => RiskAssessment | null;
+
+const disabledRule: RiskRule = (el) =>
+    el.disabled ? { tier: 'blocked', reason: 'the control is disabled' } : null;
+
+const nonInteractiveRoleRule: RiskRule = (el) =>
+    !el.href && el.role && NON_INTERACTIVE_ROLES.has(el.role)
+        ? {
+              tier: 'blocked',
+              reason: `role="${el.role}" describes a region, not something you can operate`,
+          }
+        : null;
+
+const destructiveLabelRule: RiskRule = (_el, label) => {
+    const destructive = DESTRUCTIVE.find((word) => label.includes(word));
+    return destructive
+        ? {
+              tier: 'blocked',
+              reason: `its label contains "${destructive}", which describes an action with consequences`,
+          }
+        : null;
+};
+
+const postFormRule: RiskRule = (el) =>
+    el.form?.method === 'post'
+        ? {
+              tier: 'blocked',
+              reason: 'it sits inside a form that POSTs, so touching it could submit real data',
+          }
+        : null;
+
+const dangerousInputTypeRule: RiskRule = (el) =>
+    el.tag === 'input' && el.type && DANGEROUS_INPUT_TYPES.includes(el.type)
+        ? {
+              tier: 'blocked',
+              reason: `it is a ${el.type} input, which is never filled during learning`,
+          }
+        : null;
+
+const sensitiveNameRule: RiskRule = (el) =>
+    el.name && SENSITIVE_NAMES.some((n) => el.name!.toLowerCase().includes(n))
+        ? {
+              tier: 'blocked',
+              reason: `its name "${el.name}" suggests credentials or payment details`,
+          }
+        : null;
+
+const hrefRule: RiskRule = (el, _label, context) => {
+    if (!el.href) return null;
+
+    const target = safeUrl(el.href);
+    if (!target) {
+        return { tier: 'blocked', reason: 'its href could not be parsed' };
+    }
+    if (target.origin !== context.origin) {
+        return {
+            tier: 'blocked',
+            reason: `it leaves this site for ${target.origin}`,
+        };
+    }
+    if (target.protocol !== 'http:' && target.protocol !== 'https:') {
+        return {
+            tier: 'blocked',
+            reason: `it uses the ${target.protocol} scheme`,
+        };
+    }
+    return {
+        tier: 'safe',
+        reason: 'a same-origin link: following it only navigates',
+    };
+};
+
+const SELECTION_ROLES = new Set([
+    'checkbox',
+    'radio',
+    'combobox',
+    'searchbox',
+    'tab',
+]);
+const SELECTION_TYPES = new Set(['search', 'checkbox', 'radio']);
+
+/** Controls that change what you are looking at, not what exists. */
+const selectionControlRule: RiskRule = (el) => {
+    const isSelectionControl =
+        (el.role !== null && SELECTION_ROLES.has(el.role)) ||
+        el.tag === 'select' ||
+        (el.type !== null && SELECTION_TYPES.has(el.type));
+    return isSelectionControl
+        ? {
+              tier: 'safe',
+              reason: `a ${el.role ?? el.type ?? el.tag} control, which selects rather than commits`,
+          }
+        : null;
+};
+
+const listControlLabelRule: RiskRule = (_el, label) =>
+    LIST_CONTROL.some((word) => label.includes(word))
+        ? {
+              tier: 'safe',
+              reason: 'its label describes changing how the list is shown',
+          }
+        : null;
+
+const submitRule: RiskRule = (el) =>
+    el.type === 'submit'
+        ? {
+              tier: 'confirm',
+              reason: `a submit control labelled "${el.text || '(no label)'}" inside a ${el.form?.method ?? 'get'} form`,
+          }
+        : null;
+
+const buttonRule: RiskRule = (el) => {
+    if (el.role !== 'button' && el.tag !== 'button') return null;
+    const where = el.form ? ` inside a ${el.form.method} form` : '';
+    return {
+        tier: 'confirm',
+        reason: `a button labelled "${el.text || '(no label)'}"${where}, whose effect is not obvious from its label`,
+    };
+};
+
+const textInputRule: RiskRule = (el) =>
+    el.tag === 'textarea' || el.tag === 'input'
+        ? {
+              tier: 'confirm',
+              reason: `a ${el.type ?? 'text'} input whose effect on the list is not obvious`,
+          }
+        : null;
+
+/** Checked in order; the first rule that applies decides the tier. */
+const RISK_RULES: RiskRule[] = [
+    disabledRule,
+    nonInteractiveRoleRule,
+    destructiveLabelRule,
+    postFormRule,
+    dangerousInputTypeRule,
+    sensitiveNameRule,
+    hrefRule,
+    selectionControlRule,
+    listControlLabelRule,
+    submitRule,
+    buttonRule,
+    textInputRule,
+];
+
 export function assessRisk(
     el: NormalizedElement,
     context: { origin: string },
 ): RiskAssessment {
     const label = labelOf(el);
-
-    if (el.disabled) {
-        return { tier: 'blocked', reason: 'the control is disabled' };
+    for (const rule of RISK_RULES) {
+        const result = rule(el, label, context);
+        if (result) return result;
     }
-
-    if (!el.href && el.role && NON_INTERACTIVE_ROLES.has(el.role)) {
-        return {
-            tier: 'blocked',
-            reason: `role="${el.role}" describes a region, not something you can operate`,
-        };
-    }
-
-    const destructive = DESTRUCTIVE.find((word) => label.includes(word));
-    if (destructive) {
-        return {
-            tier: 'blocked',
-            reason: `its label contains "${destructive}", which describes an action with consequences`,
-        };
-    }
-
-    if (el.form?.method === 'post') {
-        return {
-            tier: 'blocked',
-            reason: 'it sits inside a form that POSTs, so touching it could submit real data',
-        };
-    }
-
-    if (
-        el.tag === 'input' &&
-        el.type &&
-        DANGEROUS_INPUT_TYPES.includes(el.type)
-    ) {
-        return {
-            tier: 'blocked',
-            reason: `it is a ${el.type} input, which is never filled during learning`,
-        };
-    }
-
-    if (
-        el.name &&
-        SENSITIVE_NAMES.some((n) => el.name!.toLowerCase().includes(n))
-    ) {
-        return {
-            tier: 'blocked',
-            reason: `its name "${el.name}" suggests credentials or payment details`,
-        };
-    }
-
-    if (el.href) {
-        const target = safeUrl(el.href);
-        if (!target) {
-            return { tier: 'blocked', reason: 'its href could not be parsed' };
-        }
-        if (target.origin !== context.origin) {
-            return {
-                tier: 'blocked',
-                reason: `it leaves this site for ${target.origin}`,
-            };
-        }
-        if (target.protocol !== 'http:' && target.protocol !== 'https:') {
-            return {
-                tier: 'blocked',
-                reason: `it uses the ${target.protocol} scheme`,
-            };
-        }
-        return {
-            tier: 'safe',
-            reason: 'a same-origin link: following it only navigates',
-        };
-    }
-
-    // Controls that change what you are looking at, not what exists.
-    if (
-        el.role === 'checkbox' ||
-        el.role === 'radio' ||
-        el.role === 'combobox' ||
-        el.role === 'searchbox' ||
-        el.role === 'tab' ||
-        el.tag === 'select' ||
-        el.type === 'search' ||
-        el.type === 'checkbox' ||
-        el.type === 'radio'
-    ) {
-        return {
-            tier: 'safe',
-            reason: `a ${el.role ?? el.type ?? el.tag} control, which selects rather than commits`,
-        };
-    }
-
-    if (LIST_CONTROL.some((word) => label.includes(word))) {
-        return {
-            tier: 'safe',
-            reason: 'its label describes changing how the list is shown',
-        };
-    }
-
-    if (el.type === 'submit') {
-        return {
-            tier: 'confirm',
-            reason: `a submit control labelled "${el.text || '(no label)'}" inside a ${el.form?.method ?? 'get'} form`,
-        };
-    }
-
-    if (el.role === 'button' || el.tag === 'button') {
-        const where = el.form ? ` inside a ${el.form.method} form` : '';
-        return {
-            tier: 'confirm',
-            reason: `a button labelled "${el.text || '(no label)'}"${where}, whose effect is not obvious from its label`,
-        };
-    }
-
-    if (el.tag === 'textarea' || el.tag === 'input') {
-        return {
-            tier: 'confirm',
-            reason: `a ${el.type ?? 'text'} input whose effect on the list is not obvious`,
-        };
-    }
-
     return {
         tier: 'confirm',
         reason: `a ${el.tag} element with no clear role`,

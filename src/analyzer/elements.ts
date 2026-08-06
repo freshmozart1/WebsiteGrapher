@@ -134,29 +134,21 @@ export async function extractElements(
                 };
             }
 
-            const seen = new Set<Element>();
-            const out: NormalizedElement[] = [];
-
-            const candidates = Array.prototype.slice.call(
-                document.querySelectorAll(SELECTOR),
-            ) as Element[];
-
-            for (const el of candidates) {
-                if (out.length >= maxElements) break;
-                if (seen.has(el)) continue;
-                seen.add(el);
-
-                const tag = el.tagName.toLowerCase();
-                if (
-                    tag === 'input' &&
+            function isHiddenInput(el: Element): boolean {
+                return (
+                    el.tagName.toLowerCase() === 'input' &&
                     (el as HTMLInputElement).type === 'hidden'
-                )
-                    continue;
+                );
+            }
 
+            function buildNormalizedElement(
+                el: Element,
+                index: number,
+            ): NormalizedElement {
                 const box = el.getBoundingClientRect();
-                out.push({
-                    ref: `e${out.length + 1}`,
-                    tag,
+                return {
+                    ref: `e${index + 1}`,
+                    tag: el.tagName.toLowerCase(),
                     role: roleOf(el),
                     text: (el.textContent ?? '')
                         .replace(/\s+/g, ' ')
@@ -189,7 +181,23 @@ export async function extractElements(
                     classes: Array.prototype.slice.call(
                         el.classList,
                     ) as string[],
-                });
+                };
+            }
+
+            const seen = new Set<Element>();
+            const out: NormalizedElement[] = [];
+
+            const candidates = Array.prototype.slice.call(
+                document.querySelectorAll(SELECTOR),
+            ) as Element[];
+
+            for (const el of candidates) {
+                if (out.length >= maxElements) break;
+                if (seen.has(el)) continue;
+                seen.add(el);
+                if (isHiddenInput(el)) continue;
+
+                out.push(buildNormalizedElement(el, out.length));
             }
 
             return out;

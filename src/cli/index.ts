@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { pathToFileURL } from 'node:url';
 import { ZodError } from 'zod';
 import { GraphNotFoundError, GraphValidationError } from '../graph/store.js';
 import { VocabularyError } from '../graph/mutate.js';
@@ -39,7 +40,7 @@ Writing:
 Graphs live in ~/.claude/website-graphs (override with WGRAPH_HOME).
 Exit codes: 0 ok, 1 error, 2 nothing learned that answers this, 3 approvals pending.`;
 
-async function main(argv: string[]): Promise<number> {
+export async function main(argv: string[]): Promise<number> {
     const command = argv[0];
     const rest = argv.slice(1);
 
@@ -69,15 +70,19 @@ async function main(argv: string[]): Promise<number> {
     }
 }
 
-main(process.argv.slice(2))
-    .then((code) => {
-        process.exitCode = code;
-    })
-    .catch((err: unknown) => {
-        process.exitCode = report(err);
-    });
+// Only run the CLI when this file is the process entry point — not when
+// something else (a test, a re-export) imports it.
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
+    main(process.argv.slice(2))
+        .then((code) => {
+            process.exitCode = code;
+        })
+        .catch((err: unknown) => {
+            process.exitCode = report(err);
+        });
+}
 
-function report(err: unknown): number {
+export function report(err: unknown): number {
     if (err instanceof UsageError) {
         console.error(err.message);
         return EXIT.ERROR;

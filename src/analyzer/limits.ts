@@ -90,7 +90,7 @@ export interface RobotsRules {
     absent: boolean;
 }
 
-export const PERMISSIVE_ROBOTS: RobotsRules = {
+const PERMISSIVE_ROBOTS: RobotsRules = {
     disallow: [],
     allow: [],
     absent: true,
@@ -116,36 +116,60 @@ export async function fetchRobots(
     }
 }
 
-export function parseRobots(text: string): RobotsRules {
-    const disallow: string[] = [];
-    const allow: string[] = [];
-    let inStarGroup = false;
-    let sawAnyGroup = false;
+interface RobotsLine {
+    field: string;
+    value: string;
+}
+
+function parseRobotsLine(rawLine: string): RobotsLine | null {
+    const line = rawLine.replace(/#.*$/, '').trim();
+    if (!line) return null;
+    const [rawField, ...rest] = line.split(':');
+    if (!rawField || rest.length === 0) return null;
+    return { field: rawField.trim().toLowerCase(), value: rest.join(':').trim() };
+}
+
+interface RobotsParseState {
+    disallow: string[];
+    allow: string[];
+    inStarGroup: boolean;
+    sawAnyGroup: boolean;
+}
+
+function applyRobotsLine(state: RobotsParseState, line: RobotsLine): void {
+    if (line.field === 'user-agent') {
+        // A new group starts; we only care about the wildcard one.
+        state.inStarGroup = line.value === '*';
+        state.sawAnyGroup = true;
+        return;
+    }
+    if (!state.inStarGroup) return;
+    if (line.field === 'disallow' && line.value) state.disallow.push(line.value);
+    if (line.field === 'allow' && line.value) state.allow.push(line.value);
+}
+
+function parseRobots(text: string): RobotsRules {
+    const state: RobotsParseState = {
+        disallow: [],
+        allow: [],
+        inStarGroup: false,
+        sawAnyGroup: false,
+    };
 
     for (const rawLine of text.split(/\r?\n/)) {
-        const line = rawLine.replace(/#.*$/, '').trim();
-        if (!line) continue;
-        const [rawField, ...rest] = line.split(':');
-        if (!rawField || rest.length === 0) continue;
-        const field = rawField.trim().toLowerCase();
-        const value = rest.join(':').trim();
-
-        if (field === 'user-agent') {
-            // A new group starts; we only care about the wildcard one.
-            inStarGroup = value === '*';
-            sawAnyGroup = true;
-            continue;
-        }
-        if (!inStarGroup) continue;
-        if (field === 'disallow' && value) disallow.push(value);
-        if (field === 'allow' && value) allow.push(value);
+        const line = parseRobotsLine(rawLine);
+        if (line) applyRobotsLine(state, line);
     }
 
-    return { disallow, allow, absent: !sawAnyGroup };
+    return {
+        disallow: state.disallow,
+        allow: state.allow,
+        absent: !state.sawAnyGroup,
+    };
 }
 
 /** Longest matching rule wins, `Allow` beating `Disallow` on a tie. */
-export function robotsPermits(rules: RobotsRules, pathname: string): boolean {
+function robotsPermits(rules: RobotsRules, pathname: string): boolean {
     const longest = (patterns: string[]) =>
         patterns
             .filter((p) => pathname.startsWith(p))

@@ -14,7 +14,7 @@ import { locatorForHint } from './resolve.js';
  * lets a later repair pass fall through to the next one when a site changes,
  * without re-learning the page.
  */
-export function proposeLocator(el: NormalizedElement): LocatorDefinition {
+function proposeLocator(el: NormalizedElement): LocatorDefinition {
     const def: LocatorDefinition = {};
     const name = accessibleName(el);
 

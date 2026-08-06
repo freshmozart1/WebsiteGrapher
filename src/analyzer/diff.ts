@@ -26,6 +26,94 @@ export interface ChangeClassification {
 /** Query parameters that mean "which page of results". */
 const PAGE_PARAMS = ['page', 'p', 'offset', 'start', 'from', 'skip', 'pagenum'];
 
+interface ChangeContext {
+    base: Omit<ChangeClassification, 'kind' | 'detail'>;
+    beforeUrl: URL | null;
+    afterUrl: URL | null;
+    urlChanged: boolean;
+    pathChanged: boolean;
+    countBefore: number;
+    countAfter: number;
+    listChange: ListComparison;
+    domOrInteractiveChanged: boolean;
+}
+
+/** One classification attempt. Returns null when it does not apply, so the
+ *  next rule in `CHANGE_RULES` gets a turn. */
+type ChangeRule = (ctx: ChangeContext) => ChangeClassification | null;
+
+/** Leaving the page is navigation regardless of what happened to the list. */
+const navigationRule: ChangeRule = (ctx) =>
+    ctx.pathChanged
+        ? {
+              ...ctx.base,
+              kind: 'navigation',
+              detail: `moved from ${ctx.beforeUrl?.pathname ?? '?'} to ${ctx.afterUrl?.pathname ?? '?'}`,
+          }
+        : null;
+
+const paginationParamRule: ChangeRule = (ctx) =>
+    ctx.urlChanged &&
+    changedAPageParam(ctx.beforeUrl, ctx.afterUrl) &&
+    ctx.listChange.differs
+        ? {
+              ...ctx.base,
+              ...ctx.listChange.flags,
+              kind: 'pagination',
+              detail: 'a paging parameter changed and the list changed with it',
+          }
+        : null;
+
+const listChangeRule: ChangeRule = (ctx) => {
+    if (!ctx.listChange.differs) return null;
+
+    // Growth that leaves the existing items untouched is "load more", not a
+    // filter: a filter replaces what you are looking at.
+    if (ctx.listChange.flags.appended) {
+        return {
+            ...ctx.base,
+            ...ctx.listChange.flags,
+            kind: 'pagination',
+            detail: `${ctx.countAfter - ctx.countBefore} more items were appended below the existing ones`,
+        };
+    }
+    return {
+        ...ctx.base,
+        ...ctx.listChange.flags,
+        kind: 'list-changed',
+        detail: ctx.listChange.flags.reordered
+            ? 'the same items came back in a different order'
+            : `the list went from ${ctx.countBefore} to ${ctx.countAfter} items`,
+    };
+};
+
+const urlOnlyChangeRule: ChangeRule = (ctx) =>
+    ctx.urlChanged
+        ? {
+              ...ctx.base,
+              kind: 'layout-only',
+              detail: 'the URL changed but the list did not',
+          }
+        : null;
+
+const domChangeRule: ChangeRule = (ctx) =>
+    ctx.domOrInteractiveChanged
+        ? {
+              ...ctx.base,
+              kind: 'layout-only',
+              detail: 'something on the page changed, but not the list',
+          }
+        : null;
+
+/** Checked in order; the first rule that applies decides the classification. */
+const CHANGE_RULES: ChangeRule[] = [
+    navigationRule,
+    paginationParamRule,
+    listChangeRule,
+    urlOnlyChangeRule,
+    domChangeRule,
+];
+
 export function classifyChange(
     before: PageFingerprint,
     after: PageFingerprint,
@@ -33,91 +121,67 @@ export function classifyChange(
     const beforeUrl = safeUrl(before.url);
     const afterUrl = safeUrl(after.url);
     const urlChanged = before.url !== after.url;
-    const pathChanged = beforeUrl?.pathname !== afterUrl?.pathname;
+    const countBefore = before.list?.itemCount ?? 0;
+    const countAfter = after.list?.itemCount ?? 0;
 
-    const b = before.list;
-    const a = after.list;
-    const countBefore = b?.itemCount ?? 0;
-    const countAfter = a?.itemCount ?? 0;
-
-    const base = {
+    const ctx: ChangeContext = {
+        base: {
+            urlChanged,
+            itemCountBefore: countBefore,
+            itemCountAfter: countAfter,
+            reordered: false,
+            appended: false,
+        },
+        beforeUrl,
+        afterUrl,
         urlChanged,
-        itemCountBefore: countBefore,
-        itemCountAfter: countAfter,
-        reordered: false,
-        appended: false,
+        pathChanged: beforeUrl?.pathname !== afterUrl?.pathname,
+        countBefore,
+        countAfter,
+        listChange: compareLists(before.list, after.list),
+        domOrInteractiveChanged:
+            before.domHash !== after.domHash ||
+            before.interactiveCount !== after.interactiveCount,
     };
 
-    // Leaving the page is navigation regardless of what happened to the list.
-    if (pathChanged) {
-        return {
-            ...base,
-            kind: 'navigation',
-            detail: `moved from ${beforeUrl?.pathname ?? '?'} to ${afterUrl?.pathname ?? '?'}`,
-        };
+    for (const rule of CHANGE_RULES) {
+        const result = rule(ctx);
+        if (result) return result;
     }
 
-    const listChange = compareLists(b, a);
-
-    if (
-        urlChanged &&
-        changedAPageParam(beforeUrl, afterUrl) &&
-        listChange.differs
-    ) {
-        return {
-            ...base,
-            ...listChange.flags,
-            kind: 'pagination',
-            detail: 'a paging parameter changed and the list changed with it',
-        };
-    }
-
-    if (listChange.differs) {
-        // Growth that leaves the existing items untouched is "load more", not a
-        // filter: a filter replaces what you are looking at.
-        if (listChange.flags.appended) {
-            return {
-                ...base,
-                ...listChange.flags,
-                kind: 'pagination',
-                detail: `${countAfter - countBefore} more items were appended below the existing ones`,
-            };
-        }
-        return {
-            ...base,
-            ...listChange.flags,
-            kind: 'list-changed',
-            detail: listChange.flags.reordered
-                ? 'the same items came back in a different order'
-                : `the list went from ${countBefore} to ${countAfter} items`,
-        };
-    }
-
-    if (urlChanged) {
-        return {
-            ...base,
-            kind: 'layout-only',
-            detail: 'the URL changed but the list did not',
-        };
-    }
-
-    if (
-        before.domHash !== after.domHash ||
-        before.interactiveCount !== after.interactiveCount
-    ) {
-        return {
-            ...base,
-            kind: 'layout-only',
-            detail: 'something on the page changed, but not the list',
-        };
-    }
-
-    return { ...base, kind: 'noop', detail: 'nothing changed' };
+    return { ...ctx.base, kind: 'noop', detail: 'nothing changed' };
 }
 
 interface ListComparison {
     differs: boolean;
     flags: { reordered: boolean; appended: boolean };
+}
+
+function itemsUnchanged(before: ListFingerprint, after: ListFingerprint): boolean {
+    return (
+        before.itemCount === after.itemCount &&
+        before.itemHashes.every((h, i) => h === after.itemHashes[i])
+    );
+}
+
+/** Everything that was there is still there, in the same order, with more after it. */
+function itemsAppended(before: ListFingerprint, after: ListFingerprint): boolean {
+    return (
+        after.itemCount > before.itemCount &&
+        before.itemHashes.every((h, i) => h === after.itemHashes[i])
+    );
+}
+
+function itemsReordered(
+    before: ListFingerprint,
+    after: ListFingerprint,
+    appended: boolean,
+): boolean {
+    return (
+        !appended &&
+        before.itemCount === after.itemCount &&
+        sorted(before.itemHashes) === sorted(after.itemHashes)
+    );
 }
 
 function compareLists(
@@ -128,21 +192,10 @@ function compareLists(
     if (!before && !after) return { differs: false, flags: still };
     if (!before || !after) return { differs: true, flags: still };
 
-    const same =
-        before.itemCount === after.itemCount &&
-        before.itemHashes.every((h, i) => h === after.itemHashes[i]);
-    if (same) return { differs: false, flags: still };
+    if (itemsUnchanged(before, after)) return { differs: false, flags: still };
 
-    // Everything that was there is still there, in the same order, with more
-    // after it.
-    const appended =
-        after.itemCount > before.itemCount &&
-        before.itemHashes.every((h, i) => h === after.itemHashes[i]);
-
-    const reordered =
-        !appended &&
-        before.itemCount === after.itemCount &&
-        sorted(before.itemHashes) === sorted(after.itemHashes);
+    const appended = itemsAppended(before, after);
+    const reordered = itemsReordered(before, after, appended);
 
     return { differs: true, flags: { reordered, appended } };
 }

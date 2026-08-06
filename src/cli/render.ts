@@ -1,5 +1,5 @@
-import { describeLocator } from '../graph/query.js';
-import type { SiteGraph } from '../graph/schema.js';
+import { describeLocator } from '../graph/describe.js';
+import type { PageNode, SiteGraph } from '../graph/schema.js';
 import { vocabularyReport } from '../graph/mutate.js';
 import type { Plan } from '../planner/plan.js';
 
@@ -46,6 +46,84 @@ export function renderPlan(plan: Plan): string {
     return lines.join('\n');
 }
 
+function renderComponentLines(graph: SiteGraph, pageId: string): string[] {
+    const lines: string[] = [];
+    for (const c of graph.components.filter((c) => c.pageId === pageId)) {
+        const extra = [
+            c.meta?.paginationMode ? `mode=${c.meta.paginationMode}` : '',
+            c.meta?.controlKind ? `control=${c.meta.controlKind}` : '',
+        ]
+            .filter(Boolean)
+            .join(' ');
+        lines.push(
+            `      component ${c.id}  [${c.type}]  ${describeLocator(c.locator)}${extra ? `  ${extra}` : ''}`,
+        );
+    }
+    return lines;
+}
+
+function renderFieldLines(graph: SiteGraph, pageId: string): string[] {
+    const lines: string[] = [];
+    for (const f of graph.fields.filter((f) => f.pageId === pageId)) {
+        const mark = f.verified ? '' : '  (unverified)';
+        lines.push(
+            `      field ${f.semanticName}  ${describeLocator(f.locator)}${mark}`,
+        );
+    }
+    return lines;
+}
+
+function renderStateDimensionLines(page: PageNode): string[] {
+    return (page.stateDimensions ?? []).map(
+        (d) => `      state ${d.kind}  ${d.label ?? d.componentId}  (${d.valueSource})`,
+    );
+}
+
+/** One page's heading plus its components, fields, and state dimensions. */
+function renderPageSection(graph: SiteGraph, page: PageNode): string[] {
+    const entry = page.id === graph.entryPageId ? '  <- entry' : '';
+    return [
+        `  ${page.id}  [${page.type}]  ${page.urlPattern}${entry}`,
+        ...renderComponentLines(graph, page.id),
+        ...renderFieldLines(graph, page.id),
+        ...renderStateDimensionLines(page),
+    ];
+}
+
+function renderActionsSection(graph: SiteGraph): string[] {
+    const lines = ['', `Actions (${graph.edges.length}):`];
+    for (const e of graph.edges) {
+        lines.push(
+            `  ${e.sourceNode} --${e.action}--> ${e.targetNode}   ${describeLocator(e.locator)}`,
+        );
+    }
+    return lines;
+}
+
+function renderGoalsSection(graph: SiteGraph): string[] {
+    if (graph.goals.length === 0) return [];
+    const lines = ['', `Goals (${graph.goals.length}):`];
+    for (const g of graph.goals) lines.push(`  ${g.id}  ${g.name}`);
+    return lines;
+}
+
+function renderApprovalsSection(graph: SiteGraph): string[] {
+    if (graph.pendingApprovals.length === 0) return [];
+    const lines = [
+        '',
+        `Awaiting your approval (${graph.pendingApprovals.length}):`,
+    ];
+    for (const a of graph.pendingApprovals) {
+        lines.push(`  ${a.id}  ${a.description}`);
+        lines.push(`      ${a.reason}`);
+    }
+    lines.push(
+        '',
+        `Approve with: wgraph resume ${hostOf(graph.origin)} --approve <id,...>`,
+    );
+    return lines;
+}
+
 export function renderGraph(graph: SiteGraph): string {
     const lines: string[] = [
         `${graph.origin}  (learned ${graph.learnedAt.slice(0, 10)}, schema v${graph.schemaVersion})`,
@@ -54,58 +132,12 @@ export function renderGraph(graph: SiteGraph): string {
     ];
 
     for (const page of graph.pages) {
-        const entry = page.id === graph.entryPageId ? '  <- entry' : '';
-        lines.push(`  ${page.id}  [${page.type}]  ${page.urlPattern}${entry}`);
-        for (const c of graph.components.filter((c) => c.pageId === page.id)) {
-            const extra = [
-                c.meta?.paginationMode ? `mode=${c.meta.paginationMode}` : '',
-                c.meta?.controlKind ? `control=${c.meta.controlKind}` : '',
-            ]
-                .filter(Boolean)
-                .join(' ');
-            lines.push(
-                `      component ${c.id}  [${c.type}]  ${describeLocator(c.locator)}${extra ? `  ${extra}` : ''}`,
-            );
-        }
-        for (const f of graph.fields.filter((f) => f.pageId === page.id)) {
-            const mark = f.verified ? '' : '  (unverified)';
-            lines.push(
-                `      field ${f.semanticName}  ${describeLocator(f.locator)}${mark}`,
-            );
-        }
-        for (const d of page.stateDimensions ?? []) {
-            lines.push(
-                `      state ${d.kind}  ${d.label ?? d.componentId}  (${d.valueSource})`,
-            );
-        }
+        lines.push(...renderPageSection(graph, page));
     }
 
-    lines.push('', `Actions (${graph.edges.length}):`);
-    for (const e of graph.edges) {
-        lines.push(
-            `  ${e.sourceNode} --${e.action}--> ${e.targetNode}   ${describeLocator(e.locator)}`,
-        );
-    }
-
-    if (graph.goals.length > 0) {
-        lines.push('', `Goals (${graph.goals.length}):`);
-        for (const g of graph.goals) lines.push(`  ${g.id}  ${g.name}`);
-    }
-
-    if (graph.pendingApprovals.length > 0) {
-        lines.push(
-            '',
-            `Awaiting your approval (${graph.pendingApprovals.length}):`,
-        );
-        for (const a of graph.pendingApprovals) {
-            lines.push(`  ${a.id}  ${a.description}`);
-            lines.push(`      ${a.reason}`);
-        }
-        lines.push(
-            '',
-            `Approve with: wgraph resume ${hostOf(graph.origin)} --approve <id,...>`,
-        );
-    }
+    lines.push(...renderActionsSection(graph));
+    lines.push(...renderGoalsSection(graph));
+    lines.push(...renderApprovalsSection(graph));
 
     return lines.join('\n');
 }

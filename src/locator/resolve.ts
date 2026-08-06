@@ -9,6 +9,31 @@ export interface Resolution {
     count: number;
 }
 
+type HintResolver = (
+    root: Page | Locator,
+    def: LocatorDefinition,
+) => Locator | null;
+
+const HINT_RESOLVERS: Record<Hint, HintResolver> = {
+    role: (root, def) => {
+        if (!def.role) return null;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const role = def.role as any;
+        return def.name
+            ? root.getByRole(role, { name: def.name, exact: true })
+            : root.getByRole(role);
+    },
+    label: (root, def) =>
+        def.label ? root.getByLabel(def.label, { exact: true }) : null,
+    placeholder: (root, def) =>
+        def.placeholder ? root.getByPlaceholder(def.placeholder) : null,
+    text: (root, def) =>
+        def.text ? root.getByText(def.text, { exact: true }) : null,
+    css: (root, def) => (def.css ? root.locator(def.css) : null),
+    xpath: (root, def) =>
+        def.xpath ? root.locator(`xpath=${def.xpath}`) : null,
+};
+
 /**
  * Turn one hint of a LocatorDefinition into a Playwright locator.
  * Returns null when the hint is absent or Playwright rejects it (an invalid
@@ -20,32 +45,7 @@ export function locatorForHint(
     hint: Hint,
 ): Locator | null {
     try {
-        switch (hint) {
-            case 'role': {
-                if (!def.role) return null;
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                const role = def.role as any;
-                return def.name
-                    ? root.getByRole(role, { name: def.name, exact: true })
-                    : root.getByRole(role);
-            }
-            case 'label':
-                return def.label
-                    ? root.getByLabel(def.label, { exact: true })
-                    : null;
-            case 'placeholder':
-                return def.placeholder
-                    ? root.getByPlaceholder(def.placeholder)
-                    : null;
-            case 'text':
-                return def.text
-                    ? root.getByText(def.text, { exact: true })
-                    : null;
-            case 'css':
-                return def.css ? root.locator(def.css) : null;
-            case 'xpath':
-                return def.xpath ? root.locator(`xpath=${def.xpath}`) : null;
-        }
+        return HINT_RESOLVERS[hint](root, def);
     } catch {
         return null;
     }

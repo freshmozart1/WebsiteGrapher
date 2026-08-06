@@ -87,78 +87,78 @@ export async function findFieldCandidates(
                 });
             };
 
-            // 1. A single h1 is the page's subject.
-            const h1s = Array.prototype.slice.call(
-                document.querySelectorAll('h1'),
-            ) as Element[];
-            if (h1s.length === 1 && h1s[0] && visible(h1s[0])) {
-                add(h1s[0], 'title', 'text', "the page's only h1", 'high');
-            }
-
-            // 2. Microdata says what things are without anyone reading a value.
-            const ITEMPROP: Record<string, [string, string | null]> = {
-                name: ['title', 'text'],
-                price: ['price', 'currency'],
-                description: ['description', 'text'],
-                image: ['image', 'url'],
-                ratingValue: ['rating', 'number'],
-                availability: ['availability', 'text'],
-                sku: ['identifier', 'text'],
-            };
-            for (const el of Array.prototype.slice.call(
-                document.querySelectorAll('[itemprop]'),
-            ) as Element[]) {
-                const prop = el.getAttribute('itemprop') ?? '';
-                const mapped = ITEMPROP[prop];
-                if (mapped && visible(el)) {
-                    add(
-                        el,
-                        mapped[0],
-                        mapped[1],
-                        `carries itemprop="${prop}"`,
-                        'high',
-                    );
+            /** 1. A single h1 is the page's subject. */
+            function addH1Title(): void {
+                const h1s = Array.prototype.slice.call(
+                    document.querySelectorAll('h1'),
+                ) as Element[];
+                if (h1s.length === 1 && h1s[0] && visible(h1s[0])) {
+                    add(h1s[0], 'title', 'text', "the page's only h1", 'high');
                 }
             }
 
-            // 3. A currency amount in an element's own text.
-            const CURRENCY =
-                /(^|\s)([£$€¥₹]\s?\d[\d.,]*|\d[\d.,]*\s?(?:EUR|USD|GBP|CHF|SEK|PLN))(\s|$)/;
-            for (const el of Array.prototype.slice.call(
-                document.querySelectorAll('*'),
-            ) as Element[]) {
-                if (!visible(el)) continue;
-                const text = ownText(el);
-                if (
-                    text.length > 0 &&
-                    text.length < 40 &&
-                    CURRENCY.test(text)
-                ) {
-                    add(
-                        el,
-                        'price',
-                        'currency',
-                        'its own text is a currency amount',
-                        'high',
-                    );
+            /** 2. Microdata says what things are without anyone reading a value. */
+            function addMicrodataFields(): void {
+                const ITEMPROP: Record<string, [string, string | null]> = {
+                    name: ['title', 'text'],
+                    price: ['price', 'currency'],
+                    description: ['description', 'text'],
+                    image: ['image', 'url'],
+                    ratingValue: ['rating', 'number'],
+                    availability: ['availability', 'text'],
+                    sku: ['identifier', 'text'],
+                };
+                for (const el of Array.prototype.slice.call(
+                    document.querySelectorAll('[itemprop]'),
+                ) as Element[]) {
+                    const prop = el.getAttribute('itemprop') ?? '';
+                    const mapped = ITEMPROP[prop];
+                    if (mapped && visible(el)) {
+                        add(
+                            el,
+                            mapped[0],
+                            mapped[1],
+                            `carries itemprop="${prop}"`,
+                            'high',
+                        );
+                    }
                 }
             }
 
-            // 4. Class and id names that describe the thing rather than the layout.
-            for (const el of Array.prototype.slice.call(
-                document.querySelectorAll('*'),
-            ) as Element[]) {
-                if (!visible(el)) continue;
-                const token =
-                    `${el.className || ''} ${el.id || ''}`.toLowerCase();
-                if (!token.trim()) continue;
+            /** 3. A currency amount in an element's own text. */
+            function addCurrencyText(): void {
+                const CURRENCY =
+                    /(^|\s)([£$€¥₹]\s?\d[\d.,]*|\d[\d.,]*\s?(?:EUR|USD|GBP|CHF|SEK|PLN))(\s|$)/;
+                for (const el of Array.prototype.slice.call(
+                    document.querySelectorAll('*'),
+                ) as Element[]) {
+                    if (!visible(el)) continue;
+                    const text = ownText(el);
+                    if (
+                        text.length > 0 &&
+                        text.length < 40 &&
+                        CURRENCY.test(text)
+                    ) {
+                        add(
+                            el,
+                            'price',
+                            'currency',
+                            'its own text is a currency amount',
+                            'high',
+                        );
+                    }
+                }
+            }
+
+            /** The first name hint whose pattern matches this element's class/id token. */
+            function addFirstMatchingHint(el: Element, token: string): void {
                 for (const [pattern, name, shape] of hints) {
                     if (!new RegExp(pattern).test(token)) continue;
                     // `<div id="product_description"><h2>Product Description</h2></div>`
                     // names the section; it is not where the description lives. An
                     // element with no text of its own is a wrapper or a label, so let a
                     // later rule find the element that actually holds the prose.
-                    if (shape === 'text' && ownText(el).length === 0) break;
+                    if (shape === 'text' && ownText(el).length === 0) return;
                     add(
                         el,
                         name,
@@ -166,52 +166,76 @@ export async function findFieldCandidates(
                         `its class or id contains "${name}"`,
                         'medium',
                     );
-                    break;
+                    return;
                 }
             }
 
-            // 5. The biggest image is the one the page is about.
-            const images = (
-                Array.prototype.slice.call(
-                    document.querySelectorAll('img'),
-                ) as HTMLImageElement[]
-            )
-                .filter(visible)
-                .map((img) => ({
-                    img,
-                    area:
-                        img.getBoundingClientRect().width *
-                        img.getBoundingClientRect().height,
-                }))
-                .sort((a, b) => b.area - a.area);
-            if (images[0] && images[0].area > 400) {
-                add(
-                    images[0].img,
-                    'image',
-                    'url',
-                    'the largest visible image',
-                    'medium',
-                );
+            /** 4. Class and id names that describe the thing rather than the layout. */
+            function addClassNameHints(): void {
+                for (const el of Array.prototype.slice.call(
+                    document.querySelectorAll('*'),
+                ) as Element[]) {
+                    if (!visible(el)) continue;
+                    const token =
+                        `${el.className || ''} ${el.id || ''}`.toLowerCase();
+                    if (!token.trim()) continue;
+                    addFirstMatchingHint(el, token);
+                }
             }
 
-            // 6. The longest run of prose.
-            const paragraphs = (
-                Array.prototype.slice.call(
-                    document.querySelectorAll('p'),
-                ) as Element[]
-            )
-                .filter(visible)
-                .map((p) => ({ p, length: ownText(p).length }))
-                .sort((a, b) => b.length - a.length);
-            if (paragraphs[0] && paragraphs[0].length > 60) {
-                add(
-                    paragraphs[0].p,
-                    'description',
-                    'text',
-                    'the longest paragraph',
-                    'low',
-                );
+            /** 5. The biggest image is the one the page is about. */
+            function addLargestImage(): void {
+                const images = (
+                    Array.prototype.slice.call(
+                        document.querySelectorAll('img'),
+                    ) as HTMLImageElement[]
+                )
+                    .filter(visible)
+                    .map((img) => ({
+                        img,
+                        area:
+                            img.getBoundingClientRect().width *
+                            img.getBoundingClientRect().height,
+                    }))
+                    .sort((a, b) => b.area - a.area);
+                if (images[0] && images[0].area > 400) {
+                    add(
+                        images[0].img,
+                        'image',
+                        'url',
+                        'the largest visible image',
+                        'medium',
+                    );
+                }
             }
+
+            /** 6. The longest run of prose. */
+            function addLongestParagraph(): void {
+                const paragraphs = (
+                    Array.prototype.slice.call(
+                        document.querySelectorAll('p'),
+                    ) as Element[]
+                )
+                    .filter(visible)
+                    .map((p) => ({ p, length: ownText(p).length }))
+                    .sort((a, b) => b.length - a.length);
+                if (paragraphs[0] && paragraphs[0].length > 60) {
+                    add(
+                        paragraphs[0].p,
+                        'description',
+                        'text',
+                        'the longest paragraph',
+                        'low',
+                    );
+                }
+            }
+
+            addH1Title();
+            addMicrodataFields();
+            addCurrencyText();
+            addClassNameHints();
+            addLargestImage();
+            addLongestParagraph();
 
             return out;
         },

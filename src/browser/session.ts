@@ -61,7 +61,7 @@ function storagePath(name: string): string {
     return join(sessionsDir(), `${name}.storage.json`);
 }
 
-export async function readSession(name: string): Promise<SessionState | null> {
+async function readSession(name: string): Promise<SessionState | null> {
     try {
         return JSON.parse(
             await readFile(statePath(name), 'utf8'),

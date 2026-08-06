@@ -15,91 +15,122 @@ export interface Classification {
     reasons: string[];
 }
 
-export function classifyPage(
+/** One classification guess. Returns null when it does not apply, so the
+ *  next rule in `CLASSIFY_RULES` gets a turn. */
+type ClassifyRule = (
     signals: PageSignals,
     hasCluster: boolean,
-): Classification {
+) => Classification | null;
+
+const postFormRule: ClassifyRule = (signals) =>
+    signals.postFormCount >= 1 && signals.inputCount >= 2
+        ? {
+              type: 'form',
+              confidence: 'high',
+              reasons: [
+                  `${signals.postFormCount} POST form(s) with ${signals.inputCount} inputs`,
+              ],
+          }
+        : null;
+
+/** Checked before the list rule: a detail page usually carries a repeating
+ *  specification table, and that repeats every bit as convincingly as a
+ *  product grid. */
+const itemUrlRule: ClassifyRule = (signals) =>
+    signals.looksLikeItemUrl && signals.headings.h1 === 1
+        ? {
+              type: 'detail',
+              confidence: 'high',
+              reasons: ['the URL names one item and the page has a single h1'],
+          }
+        : null;
+
+const strongOverviewRule: ClassifyRule = (signals, hasCluster) =>
+    hasCluster && signals.topClusterSize >= 3 && signals.topClusterLinks
+        ? {
+              type: 'overview',
+              confidence: 'high',
+              reasons: [
+                  `${signals.topClusterSize} repeating items covering ${(signals.topClusterAreaShare * 100).toFixed(0)}% of the viewport, each linking somewhere`,
+              ],
+          }
+        : null;
+
+const weakOverviewRule: ClassifyRule = (signals, hasCluster) =>
+    hasCluster && signals.topClusterSize >= 3
+        ? {
+              type: 'overview',
+              confidence: 'low',
+              reasons: [
+                  `${signals.topClusterSize} repeating items, but none of them link anywhere — ` +
+                      `this may be a table rather than a list of items`,
+              ],
+          }
+        : null;
+
+const searchRule: ClassifyRule = (signals, hasCluster) =>
+    signals.searchInputCount >= 1 && !hasCluster
+        ? {
+              type: 'search',
+              confidence: 'medium',
+              reasons: ['a search input and no list of results'],
+          }
+        : null;
+
+const rootRule: ClassifyRule = (signals) => {
     const atRoot =
         signals.pathSegments.length === 0 ||
         (signals.pathSegments.length === 1 &&
             /^index\.\w+$/.test(signals.pathSegments[0]!));
+    return atRoot
+        ? {
+              type: 'home',
+              confidence: 'medium',
+              reasons: ['the site root, with no list of its own'],
+          }
+        : null;
+};
 
-    if (signals.postFormCount >= 1 && signals.inputCount >= 2) {
-        return {
-            type: 'form',
-            confidence: 'high',
-            reasons: [
-                `${signals.postFormCount} POST form(s) with ${signals.inputCount} inputs`,
-            ],
-        };
+const formRule: ClassifyRule = (signals) =>
+    signals.formCount >= 1 && signals.inputCount >= 2
+        ? {
+              type: 'form',
+              confidence: 'medium',
+              reasons: [`a form with ${signals.inputCount} inputs`],
+          }
+        : null;
+
+const singleH1Rule: ClassifyRule = (signals) =>
+    signals.headings.h1 === 1
+        ? {
+              type: 'detail',
+              confidence: 'low',
+              reasons: [
+                  'a single h1 and nothing else distinctive — worth a second look',
+              ],
+          }
+        : null;
+
+/** Checked in order; the first rule that applies decides the classification. */
+const CLASSIFY_RULES: ClassifyRule[] = [
+    postFormRule,
+    itemUrlRule,
+    strongOverviewRule,
+    weakOverviewRule,
+    searchRule,
+    rootRule,
+    formRule,
+    singleH1Rule,
+];
+
+export function classifyPage(
+    signals: PageSignals,
+    hasCluster: boolean,
+): Classification {
+    for (const rule of CLASSIFY_RULES) {
+        const result = rule(signals, hasCluster);
+        if (result) return result;
     }
-
-    // Checked before the list rule: a detail page usually carries a repeating
-    // specification table, and that repeats every bit as convincingly as a
-    // product grid.
-    if (signals.looksLikeItemUrl && signals.headings.h1 === 1) {
-        return {
-            type: 'detail',
-            confidence: 'high',
-            reasons: ['the URL names one item and the page has a single h1'],
-        };
-    }
-
-    if (hasCluster && signals.topClusterSize >= 3 && signals.topClusterLinks) {
-        return {
-            type: 'overview',
-            confidence: 'high',
-            reasons: [
-                `${signals.topClusterSize} repeating items covering ${(signals.topClusterAreaShare * 100).toFixed(0)}% of the viewport, each linking somewhere`,
-            ],
-        };
-    }
-
-    if (hasCluster && signals.topClusterSize >= 3) {
-        return {
-            type: 'overview',
-            confidence: 'low',
-            reasons: [
-                `${signals.topClusterSize} repeating items, but none of them link anywhere — ` +
-                    `this may be a table rather than a list of items`,
-            ],
-        };
-    }
-
-    if (signals.searchInputCount >= 1 && !hasCluster) {
-        return {
-            type: 'search',
-            confidence: 'medium',
-            reasons: ['a search input and no list of results'],
-        };
-    }
-
-    if (atRoot) {
-        return {
-            type: 'home',
-            confidence: 'medium',
-            reasons: ['the site root, with no list of its own'],
-        };
-    }
-
-    if (signals.formCount >= 1 && signals.inputCount >= 2) {
-        return {
-            type: 'form',
-            confidence: 'medium',
-            reasons: [`a form with ${signals.inputCount} inputs`],
-        };
-    }
-
-    if (signals.headings.h1 === 1) {
-        return {
-            type: 'detail',
-            confidence: 'low',
-            reasons: [
-                'a single h1 and nothing else distinctive — worth a second look',
-            ],
-        };
-    }
-
     return {
         type: 'home',
         confidence: 'low',

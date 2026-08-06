@@ -39,6 +39,51 @@ function trail(e: Entry): string {
     return e.steps.map((s) => s.edge.id).join('>');
 }
 
+/** The cheapest not-yet-settled entry in `best`, or null once none remain. */
+function pickNextUnsettled(
+    best: Map<string, Entry>,
+    settled: Set<string>,
+): { id: string; entry: Entry } | null {
+    let currentId: string | undefined;
+    let current: Entry | undefined;
+    for (const [id, entry] of best) {
+        if (settled.has(id)) continue;
+        if (!current || better(entry, current)) {
+            current = entry;
+            currentId = id;
+        }
+    }
+    return currentId && current ? { id: currentId, entry: current } : null;
+}
+
+/** Update `best` with every outgoing edge from `currentId` that improves on
+ *  the entry already known for its target. */
+function relaxEdges(
+    graph: SiteGraph,
+    currentId: string,
+    current: Entry,
+    settled: Set<string>,
+    best: Map<string, Entry>,
+): void {
+    const outgoing = [...edgesFromPage(graph, currentId)].sort((a, b) =>
+        a.id.localeCompare(b.id),
+    );
+    for (const edge of outgoing) {
+        if (settled.has(edge.targetNode)) continue;
+        const candidate: Entry = {
+            cost: current.cost + ACTION_COST[edge.action],
+            steps: [
+                ...current.steps,
+                { edge, fromPage: currentId, toPage: edge.targetNode },
+            ],
+        };
+        const existing = best.get(edge.targetNode);
+        if (!existing || better(candidate, existing)) {
+            best.set(edge.targetNode, candidate);
+        }
+    }
+}
+
 /**
  * @returns the ordered steps from `fromPageId` to `toPageId`, or null if the
  *          graph holds no route. An empty array means they are the same page.
@@ -54,36 +99,12 @@ export function findPath(
     const settled = new Set<string>();
 
     for (;;) {
-        let currentId: string | undefined;
-        let current: Entry | undefined;
-        for (const [id, entry] of best) {
-            if (settled.has(id)) continue;
-            if (!current || better(entry, current)) {
-                current = entry;
-                currentId = id;
-            }
-        }
-        if (!currentId || !current) return null;
-        if (currentId === toPageId) return current.steps;
-        settled.add(currentId);
+        const next = pickNextUnsettled(best, settled);
+        if (!next) return null;
+        if (next.id === toPageId) return next.entry.steps;
+        settled.add(next.id);
 
-        const outgoing = [...edgesFromPage(graph, currentId)].sort((a, b) =>
-            a.id.localeCompare(b.id),
-        );
-        for (const edge of outgoing) {
-            if (settled.has(edge.targetNode)) continue;
-            const candidate: Entry = {
-                cost: current.cost + ACTION_COST[edge.action],
-                steps: [
-                    ...current.steps,
-                    { edge, fromPage: currentId, toPage: edge.targetNode },
-                ],
-            };
-            const existing = best.get(edge.targetNode);
-            if (!existing || better(candidate, existing)) {
-                best.set(edge.targetNode, candidate);
-            }
-        }
+        relaxEdges(graph, next.id, next.entry, settled, best);
     }
 }
 

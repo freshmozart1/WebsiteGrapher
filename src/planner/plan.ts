@@ -1,12 +1,12 @@
 import {
     componentById,
-    describeLocator,
     fieldById,
     fieldNamesInUse,
     fieldsNamed,
     goalById,
     pageById,
 } from '../graph/query.js';
+import { describeLocator } from '../graph/describe.js';
 import type {
     Action,
     FieldNode,
@@ -65,7 +65,6 @@ export function buildPlan(
     options: { question?: string; confidence?: Confidence } = {},
 ): Plan {
     const question = options.question;
-    const notes: string[] = [];
 
     if (graph.pages.length === 0) {
         return {
@@ -90,17 +89,7 @@ export function buildPlan(
     const resolved = resolveTarget(graph, target);
     if ('gap' in resolved) return { ...resolved.gap, question };
 
-    // A field can sit on several pages; take whichever is genuinely closest
-    // rather than whichever happens to be first in the file.
-    let chosen:
-        { pageId: string; field?: FieldNode; path: PathStep[] } | undefined;
-    for (const candidate of resolved.candidates) {
-        const path = findPath(graph, entry.id, candidate.pageId);
-        if (!path) continue;
-        if (!chosen || path.length < chosen.path.length) {
-            chosen = { pageId: candidate.pageId, field: candidate.field, path };
-        }
-    }
+    const chosen = findClosestCandidate(graph, entry.id, resolved.candidates);
 
     if (!chosen) {
         const reachable = reachablePages(graph, entry.id);
@@ -128,17 +117,6 @@ export function buildPlan(
         };
     }
 
-    if (chosen.field && !chosen.field.verified) {
-        notes.push(
-            `The "${chosen.field.semanticName}" position was seen on only one sample page, so it may not hold for every item.`,
-        );
-    }
-    if (chosen.path.length === 0) {
-        notes.push(
-            'The answer is on the entry page itself — no navigation needed.',
-        );
-    }
-
     return {
         ok: true,
         question,
@@ -159,8 +137,44 @@ export function buildPlan(
               }
             : {}),
         confidence: options.confidence ?? 'high',
-        notes,
+        notes: notesFor(chosen),
     };
+}
+
+/** A field can sit on several pages; take whichever is genuinely closest
+ *  rather than whichever happens to be first in the file. */
+function findClosestCandidate(
+    graph: SiteGraph,
+    entryId: string,
+    candidates: Candidate[],
+): { pageId: string; field?: FieldNode; path: PathStep[] } | undefined {
+    let chosen: { pageId: string; field?: FieldNode; path: PathStep[] } | undefined;
+    for (const candidate of candidates) {
+        const path = findPath(graph, entryId, candidate.pageId);
+        if (!path) continue;
+        if (!chosen || path.length < chosen.path.length) {
+            chosen = { pageId: candidate.pageId, field: candidate.field, path };
+        }
+    }
+    return chosen;
+}
+
+function notesFor(chosen: {
+    field?: FieldNode;
+    path: PathStep[];
+}): string[] {
+    const notes: string[] = [];
+    if (chosen.field && !chosen.field.verified) {
+        notes.push(
+            `The "${chosen.field.semanticName}" position was seen on only one sample page, so it may not hold for every item.`,
+        );
+    }
+    if (chosen.path.length === 0) {
+        notes.push(
+            'The answer is on the entry page itself — no navigation needed.',
+        );
+    }
+    return notes;
 }
 
 interface Candidate {

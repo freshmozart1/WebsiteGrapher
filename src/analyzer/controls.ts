@@ -32,6 +32,104 @@ const MORE_WORDS = [
     'load additional',
 ];
 
+/**
+ * Two numbered links, or one plus a next control: on a two-page pager the
+ * current page is rendered as plain text, so only one number is ever a link.
+ */
+async function detectNumberedPagination(
+    page: Page,
+    visible: NormalizedElement[],
+): Promise<PaginationFinding | null> {
+    const numbered = numberedLinks(visible);
+    const next = visible.find((e) => isNext(e));
+
+    if (!(numbered.length >= 2 || (numbered.length === 1 && next))) {
+        return null;
+    }
+
+    const locator = next
+        ? await synthesizeLocator(page, next)
+        : await synthesizeLocator(page, numbered[0]!);
+    return {
+        mode: 'numbered',
+        locator,
+        evidence:
+            numbered.length >= 2
+                ? `${numbered.length} page-number links differing by a paging parameter`
+                : 'a page-number link alongside a next control',
+    };
+}
+
+async function detectNextPagination(
+    page: Page,
+    visible: NormalizedElement[],
+    containerCss: string | null,
+): Promise<PaginationFinding | null> {
+    const next = visible.find((e) => isNext(e));
+    if (!next) return null;
+
+    const locator = await synthesizeLocator(page, next);
+    if (!locator) return null;
+
+    if (!containerCss) {
+        return { mode: 'next', locator, evidence: 'labelled as a next-page control' };
+    }
+
+    const result = await probeElement(page, next, locator, { containerCss });
+    if (
+        result.change.kind === 'pagination' ||
+        result.change.kind === 'navigation'
+    ) {
+        return {
+            mode: 'next',
+            locator,
+            evidence: `clicking it ${result.change.detail}`,
+        };
+    }
+    return null;
+}
+
+async function detectLoadMorePagination(
+    page: Page,
+    visible: NormalizedElement[],
+    containerCss: string | null,
+): Promise<PaginationFinding | null> {
+    const more = visible.find((e) => isLoadMore(e));
+    if (!more || !containerCss) return null;
+
+    const locator = await synthesizeLocator(page, more);
+    if (!locator) return null;
+
+    const result = await probeElement(page, more, locator, { containerCss });
+    if (!result.change.appended) return null;
+
+    return {
+        mode: 'load-more',
+        locator,
+        evidence: `clicking it appended ${
+            result.change.itemCountAfter - result.change.itemCountBefore
+        } items below the existing ones`,
+    };
+}
+
+async function detectInfiniteScrollPagination(
+    page: Page,
+    containerCss: string | null,
+): Promise<PaginationFinding | null> {
+    if (!containerCss) return null;
+
+    const scrolled = await probeInfiniteScroll(page, containerCss);
+    if (!scrolled?.change.appended) return null;
+
+    return {
+        mode: 'infinite-scroll',
+        locator: null,
+        evidence: `scrolling to the bottom appended ${
+            scrolled.change.itemCountAfter - scrolled.change.itemCountBefore
+        } items`,
+    };
+}
+
 export async function detectPagination(
     page: Page,
     elements: NormalizedElement[],
@@ -39,85 +137,12 @@ export async function detectPagination(
 ): Promise<PaginationFinding | null> {
     const visible = elements.filter((e) => e.visible);
 
-    const numbered = numberedLinks(visible);
-    const next = visible.find((e) => isNext(e));
-
-    // Two numbered links, or one plus a next control: on a two-page pager the
-    // current page is rendered as plain text, so only one number is ever a link.
-    if (numbered.length >= 2 || (numbered.length === 1 && next)) {
-        const locator = next
-            ? await synthesizeLocator(page, next)
-            : await synthesizeLocator(page, numbered[0]!);
-        return {
-            mode: 'numbered',
-            locator,
-            evidence:
-                numbered.length >= 2
-                    ? `${numbered.length} page-number links differing by a paging parameter`
-                    : 'a page-number link alongside a next control',
-        };
-    }
-
-    if (next) {
-        const locator = await synthesizeLocator(page, next);
-        if (locator && containerCss) {
-            const result = await probeElement(page, next, locator, {
-                containerCss,
-            });
-            if (
-                result.change.kind === 'pagination' ||
-                result.change.kind === 'navigation'
-            ) {
-                return {
-                    mode: 'next',
-                    locator,
-                    evidence: `clicking it ${result.change.detail}`,
-                };
-            }
-        } else if (locator) {
-            return {
-                mode: 'next',
-                locator,
-                evidence: 'labelled as a next-page control',
-            };
-        }
-    }
-
-    const more = visible.find((e) => isLoadMore(e));
-    if (more && containerCss) {
-        const locator = await synthesizeLocator(page, more);
-        if (locator) {
-            const result = await probeElement(page, more, locator, {
-                containerCss,
-            });
-            if (result.change.appended) {
-                return {
-                    mode: 'load-more',
-                    locator,
-                    evidence: `clicking it appended ${
-                        result.change.itemCountAfter -
-                        result.change.itemCountBefore
-                    } items below the existing ones`,
-                };
-            }
-        }
-    }
-
-    if (containerCss) {
-        const scrolled = await probeInfiniteScroll(page, containerCss);
-        if (scrolled?.change.appended) {
-            return {
-                mode: 'infinite-scroll',
-                locator: null,
-                evidence: `scrolling to the bottom appended ${
-                    scrolled.change.itemCountAfter -
-                    scrolled.change.itemCountBefore
-                } items`,
-            };
-        }
-    }
-
-    return null;
+    return (
+        (await detectNumberedPagination(page, visible)) ??
+        (await detectNextPagination(page, visible, containerCss)) ??
+        (await detectLoadMorePagination(page, visible, containerCss)) ??
+        (await detectInfiniteScrollPagination(page, containerCss))
+    );
 }
 
 function numberedLinks(elements: NormalizedElement[]): NormalizedElement[] {

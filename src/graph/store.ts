@@ -22,7 +22,7 @@ import {
  *   ~/.claude/website-graphs/<domain>.json
  * Overridable with WGRAPH_HOME (used by the tests).
  */
-export function storeDir(): string {
+function storeDir(): string {
     return (
         process.env.WGRAPH_HOME ?? join(homedir(), '.claude', 'website-graphs')
     );
@@ -55,7 +55,7 @@ function hasScheme(s: string): boolean {
     return /^[a-z][a-z0-9+.-]*:\/\//i.test(s);
 }
 
-export function graphPath(domain: string): string {
+function graphPath(domain: string): string {
     return join(storeDir(), `${domain}.json`);
 }
 

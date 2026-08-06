@@ -66,7 +66,7 @@ export const RESOLUTION_ORDER = [
  */
 const VALUE_BEARING_HINTS = ['text', 'name'] as const;
 
-export function isStructuralLocator(l: LocatorDefinition): boolean {
+function isStructuralLocator(l: LocatorDefinition): boolean {
     return VALUE_BEARING_HINTS.every((h) => !l[h]);
 }
 
@@ -74,7 +74,7 @@ export function isStructuralLocator(l: LocatorDefinition): boolean {
 // Vocabulary
 // ---------------------------------------------------------------------------
 
-export const VocabEntrySchema = z.object({
+const VocabEntrySchema = z.object({
     name: vocabName,
     /** One line, written when the value is registered. Precise enough that a
      *  later run reaches the same choice instead of inventing a synonym. */
@@ -84,7 +84,7 @@ export const VocabEntrySchema = z.object({
 
 export type VocabEntry = z.infer<typeof VocabEntrySchema>;
 
-export const VocabularySchema = z.object({
+const VocabularySchema = z.object({
     pageTypes: z.array(VocabEntrySchema),
     componentTypes: z.array(VocabEntrySchema),
     fieldNames: z.array(VocabEntrySchema),
@@ -203,9 +203,9 @@ export const StateDimensionSchema = z.object({
     label: z.string().optional(),
 });
 
-export type StateDimension = z.infer<typeof StateDimensionSchema>;
+type StateDimension = z.infer<typeof StateDimensionSchema>;
 
-export const PageNodeSchema = z.object({
+const PageNodeSchema = z.object({
     id: nonEmpty,
     /** Open vocabulary — must be registered in `vocabulary.pageTypes`. */
     type: vocabName,
@@ -231,9 +231,9 @@ export const ComponentMetaSchema = z.object({
         .optional(),
 });
 
-export type ComponentMeta = z.infer<typeof ComponentMetaSchema>;
+type ComponentMeta = z.infer<typeof ComponentMetaSchema>;
 
-export const ComponentNodeSchema = z.object({
+const ComponentNodeSchema = z.object({
     id: nonEmpty,
     pageId: nonEmpty,
     /** Open vocabulary — must be registered in `vocabulary.componentTypes`. */
@@ -256,7 +256,7 @@ export const ActionSchema = z.enum([
 
 export type Action = z.infer<typeof ActionSchema>;
 
-export const ActionEdgeSchema = z.object({
+const ActionEdgeSchema = z.object({
     id: nonEmpty,
     /** A page or a component. */
     sourceNode: nonEmpty,
@@ -269,7 +269,7 @@ export const ActionEdgeSchema = z.object({
 
 export type ActionEdge = z.infer<typeof ActionEdgeSchema>;
 
-export const FieldNodeSchema = z.object({
+const FieldNodeSchema = z.object({
     id: nonEmpty,
     pageId: nonEmpty,
     /** Open vocabulary — must be registered in `vocabulary.fieldNames`. */
@@ -284,7 +284,7 @@ export const FieldNodeSchema = z.object({
 
 export type FieldNode = z.infer<typeof FieldNodeSchema>;
 
-export const GoalSchema = z.object({
+const GoalSchema = z.object({
     id: nonEmpty,
     name: nonEmpty,
     targetField: nonEmpty,
@@ -466,14 +466,14 @@ export const SiteGraphSchema = SiteGraphShape.superRefine((g, ctx) => {
 /** The planner's runtime type: a concrete state of a page, produced inside a
  *  plan. Deliberately not stored — enumerating filter x sort x page
  *  combinations explodes, so the graph stores `stateDimensions` instead. */
-export const PageStateSchema = z.object({
+const PageStateSchema = z.object({
     pageId: nonEmpty,
     filters: z.record(z.unknown()),
     sorting: z.string().optional(),
     pagination: z.number().optional(),
 });
 
-export type PageState = z.infer<typeof PageStateSchema>;
+type PageState = z.infer<typeof PageStateSchema>;
 
 export function emptyGraph(origin: string, now = new Date()): SiteGraph {
     return {

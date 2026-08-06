@@ -83,20 +83,23 @@ function installDomHelpers(): void {
             : tag;
     }
 
-    function cssPathOf(
+    function uniqueIdSelector(el: Element): string | null {
+        const id = el.getAttribute('id');
+        return id && document.querySelectorAll(`[id="${id}"]`).length === 1
+            ? `#${id}`
+            : null;
+    }
+
+    function testIdSelector(
         el: Element,
         options?: { preferTestId?: boolean },
-    ): string {
-        const id = el.getAttribute('id');
-        if (id && document.querySelectorAll(`[id="${id}"]`).length === 1) {
-            return `#${id}`;
-        }
+    ): string | null {
+        if (!options?.preferTestId) return null;
+        const testId = el.getAttribute('data-testid');
+        return testId ? `[data-testid="${testId}"]` : null;
+    }
 
-        if (options && options.preferTestId) {
-            const testId = el.getAttribute('data-testid');
-            if (testId) return `[data-testid="${testId}"]`;
-        }
-
+    function positionalPath(el: Element): string {
         const parts: string[] = [];
         let node: Element | null = el;
         while (node && node.nodeType === 1 && parts.length < 8) {
@@ -111,6 +114,15 @@ function installDomHelpers(): void {
             node = parent;
         }
         return parts.join(' > ');
+    }
+
+    function cssPathOf(
+        el: Element,
+        options?: { preferTestId?: boolean },
+    ): string {
+        return (
+            uniqueIdSelector(el) ?? testIdSelector(el, options) ?? positionalPath(el)
+        );
     }
 
     function relativePath(root: Element, target: Element): string {

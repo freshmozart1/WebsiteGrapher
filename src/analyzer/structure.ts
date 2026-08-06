@@ -71,14 +71,11 @@ export async function findRepetition(page: Page): Promise<RepetitionCluster[]> {
                 1,
                 window.innerWidth * window.innerHeight,
             );
-            const clusters: RepetitionCluster[] = [];
-            const containers = Array.prototype.slice.call(
-                document.querySelectorAll('*'),
-            ) as Element[];
 
-            for (const container of containers) {
-                if (container.children.length < minItems) continue;
-
+            /** Direct children of `container`, bucketed by structural signature. */
+            function groupBySignature(
+                container: Element,
+            ): Map<string, Element[]> {
                 const bySignature = new Map<string, Element[]>();
                 for (const child of Array.prototype.slice.call(
                     container.children,
@@ -88,70 +85,102 @@ export async function findRepetition(page: Page): Promise<RepetitionCluster[]> {
                     if (bucket) bucket.push(child);
                     else bySignature.set(sig, [child]);
                 }
+                return bySignature;
+            }
 
-                for (const [, items] of bySignature) {
+            /** Why a cluster is excluded from the plausible-list ranking, if at all. */
+            function exclusionReasonFor(
+                container: Element,
+                areaShare: number,
+                landmark: string | null,
+            ): string | null {
+                if (landmark !== null) {
+                    return `sits inside <${landmark}>, so it is navigation rather than a list of items`;
+                }
+                if (areaShare < minAreaShare) {
+                    return `covers only ${(areaShare * 100).toFixed(1)}% of the viewport`;
+                }
+                return null;
+            }
+
+            /** One same-signature sibling group, or null if it can't form a cluster. */
+            function buildCluster(
+                container: Element,
+                items: Element[],
+            ): RepetitionCluster | null {
+                const first = items[0];
+                if (!first) return null;
+
+                const totalArea = items.reduce(
+                    (sum, el) => sum + areaOf(el),
+                    0,
+                );
+                if (totalArea === 0) return null;
+
+                const classes = Array.prototype.slice.call(
+                    first.classList,
+                ) as string[];
+                const itemCss =
+                    classes.length > 0
+                        ? `${first.tagName.toLowerCase()}.${classes.map((c) => CSS.escape(c)).join('.')}`
+                        : first.tagName.toLowerCase();
+
+                const anchor = first.querySelector('a[href]');
+                const hrefs = items
+                    .slice(0, 3)
+                    .map((item) => item.querySelector('a[href]'))
+                    .filter(
+                        (a): a is HTMLAnchorElement =>
+                            a instanceof HTMLAnchorElement,
+                    )
+                    .map((a) => a.href);
+
+                const areaShare = Math.min(1, totalArea / viewportArea);
+                const avgItemChildren =
+                    items.reduce((sum, el) => sum + el.children.length, 0) /
+                    items.length;
+                // Only the chrome landmarks count here: a list inside <main> is the
+                // page's own content, and excluding it would throw away the answer.
+                const landmark = wg.landmarkOf(container, landmarks);
+                const exclusionReason = exclusionReasonFor(
+                    container,
+                    areaShare,
+                    landmark,
+                );
+
+                // Item count, page share, and how much structure each item has. A
+                // breadcrumb has the count but neither the area nor the structure.
+                const richness = Math.min(1, (1 + avgItemChildren) / 3);
+
+                return {
+                    containerCss: wg.cssPathOf(container),
+                    itemCss,
+                    clickTargetCss: anchor
+                        ? wg.relativePath(first, anchor)
+                        : null,
+                    sampleHrefs: hrefs,
+                    count: items.length,
+                    areaShare,
+                    avgItemChildren,
+                    landmark,
+                    excluded: exclusionReason !== null,
+                    exclusionReason,
+                    score: items.length * areaShare * richness,
+                };
+            }
+
+            const clusters: RepetitionCluster[] = [];
+            const containers = Array.prototype.slice.call(
+                document.querySelectorAll('*'),
+            ) as Element[];
+
+            for (const container of containers) {
+                if (container.children.length < minItems) continue;
+
+                for (const [, items] of groupBySignature(container)) {
                     if (items.length < minItems) continue;
-                    const first = items[0];
-                    if (!first) continue;
-
-                    const totalArea = items.reduce(
-                        (sum, el) => sum + areaOf(el),
-                        0,
-                    );
-                    if (totalArea === 0) continue;
-
-                    const classes = Array.prototype.slice.call(
-                        first.classList,
-                    ) as string[];
-                    const itemCss =
-                        classes.length > 0
-                            ? `${first.tagName.toLowerCase()}.${classes.map((c) => CSS.escape(c)).join('.')}`
-                            : first.tagName.toLowerCase();
-
-                    const anchor = first.querySelector('a[href]');
-                    const hrefs = items
-                        .slice(0, 3)
-                        .map((item) => item.querySelector('a[href]'))
-                        .filter(
-                            (a): a is HTMLAnchorElement =>
-                                a instanceof HTMLAnchorElement,
-                        )
-                        .map((a) => a.href);
-
-                    const areaShare = Math.min(1, totalArea / viewportArea);
-                    const avgItemChildren =
-                        items.reduce((sum, el) => sum + el.children.length, 0) /
-                        items.length;
-                    // Only the chrome landmarks count here: a list inside <main> is the
-                    // page's own content, and excluding it would throw away the answer.
-                    const landmark = wg.landmarkOf(container, landmarks);
-
-                    let exclusionReason: string | null = null;
-                    if (landmark !== null) {
-                        exclusionReason = `sits inside <${landmark}>, so it is navigation rather than a list of items`;
-                    } else if (areaShare < minAreaShare) {
-                        exclusionReason = `covers only ${(areaShare * 100).toFixed(1)}% of the viewport`;
-                    }
-
-                    // Item count, page share, and how much structure each item has. A
-                    // breadcrumb has the count but neither the area nor the structure.
-                    const richness = Math.min(1, (1 + avgItemChildren) / 3);
-
-                    clusters.push({
-                        containerCss: wg.cssPathOf(container),
-                        itemCss,
-                        clickTargetCss: anchor
-                            ? wg.relativePath(first, anchor)
-                            : null,
-                        sampleHrefs: hrefs,
-                        count: items.length,
-                        areaShare,
-                        avgItemChildren,
-                        landmark,
-                        excluded: exclusionReason !== null,
-                        exclusionReason,
-                        score: items.length * areaShare * richness,
-                    });
+                    const cluster = buildCluster(container, items);
+                    if (cluster) clusters.push(cluster);
                 }
             }
 

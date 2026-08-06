@@ -1,11 +1,13 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { graphCommand } from '../../src/cli/commands/graph.js';
 import { askCommand, planCommand } from '../../src/cli/commands/plan.js';
+import { sessionCommand } from '../../src/cli/commands/session.js';
 import { EXIT, UsageError } from '../../src/cli/exit.js';
-import { saveGraph } from '../../src/graph/store.js';
+import { saveGraph, sessionsDir } from '../../src/graph/store.js';
 import { bookshopGraph } from '../helpers/graphs.js';
 
 let home: string;
@@ -262,5 +264,52 @@ describe('wgraph graph', () => {
 
     it('rejects an unknown subcommand', async () => {
         await expect(graphCommand(['frobnicate'])).rejects.toThrow(UsageError);
+    });
+});
+
+describe('wgraph session', () => {
+    it('reports no sessions when none are saved', async () => {
+        expect(await sessionCommand(['list'])).toBe(EXIT.OK);
+        expect(printed()).toMatch(/No saved sessions/);
+    });
+
+    it('lists saved sessions with their current url', async () => {
+        await mkdir(sessionsDir(), { recursive: true });
+        await writeFile(
+            join(sessionsDir(), 'books.json'),
+            JSON.stringify({
+                name: 'books',
+                origin: 'https://books.toscrape.com',
+                currentUrl: 'https://books.toscrape.com/catalogue',
+                createdAt: '2024-01-01T00:00:00.000Z',
+                updatedAt: '2024-01-02T00:00:00.000Z',
+            }),
+            'utf8',
+        );
+
+        expect(await sessionCommand(['list'])).toBe(EXIT.OK);
+        expect(printed()).toContain(
+            'books  https://books.toscrape.com/catalogue  (updated 2024-01-02T00:00:00.000Z)',
+        );
+    });
+
+    it('clears a saved session', async () => {
+        await mkdir(sessionsDir(), { recursive: true });
+        const statePath = join(sessionsDir(), 'books.json');
+        await writeFile(statePath, JSON.stringify({ name: 'books' }), 'utf8');
+
+        expect(await sessionCommand(['clear', 'books'])).toBe(EXIT.OK);
+        expect(printed()).toContain('Cleared saved state for "books"');
+        expect(existsSync(statePath)).toBe(false);
+    });
+
+    it('requires a name to clear', async () => {
+        await expect(sessionCommand(['clear'])).rejects.toThrow(UsageError);
+    });
+
+    it('rejects an unknown subcommand', async () => {
+        await expect(sessionCommand(['frobnicate'])).rejects.toThrow(
+            UsageError,
+        );
     });
 });

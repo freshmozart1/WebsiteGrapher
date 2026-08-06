@@ -221,21 +221,20 @@ function allIds(graph: SiteGraph): Set<string> {
     ]);
 }
 
-/**
- * Apply a patch in place. Ids may be supplied explicitly so a patch can
- * reference nodes it creates in the same call; otherwise readable ids are
- * generated. The caller re-validates the whole graph before saving.
- */
-export function applyPatch(graph: SiteGraph, patch: GraphPatch): void {
-    const taken = allIds(graph);
-    const now = new Date().toISOString();
-
+function applyVocabularyPatch(graph: SiteGraph, patch: GraphPatch): void {
     for (const kind of VOCAB_KINDS) {
         for (const add of patch.vocabulary?.[kind] ?? []) {
             registerVocab(graph, kind, add.name, add.description);
         }
     }
+}
 
+function applyPagesPatch(
+    graph: SiteGraph,
+    patch: GraphPatch,
+    taken: Set<string>,
+    now: string,
+): void {
     for (const p of patch.pages ?? []) {
         const id = uniqueId(p.id ?? `page-${slug(p.type)}`, taken);
         graph.pages.push({
@@ -250,7 +249,13 @@ export function applyPatch(graph: SiteGraph, patch: GraphPatch): void {
         });
         if (p.entry) graph.entryPageId = id;
     }
+}
 
+function applyComponentsPatch(
+    graph: SiteGraph,
+    patch: GraphPatch,
+    taken: Set<string>,
+): void {
     for (const c of patch.components ?? []) {
         const id = uniqueId(
             c.id ?? `comp-${slug(c.type)}-${slug(c.pageId)}`,
@@ -267,7 +272,13 @@ export function applyPatch(graph: SiteGraph, patch: GraphPatch): void {
         const page = graph.pages.find((p) => p.id === c.pageId);
         if (page && !page.components.includes(id)) page.components.push(id);
     }
+}
 
+function applyEdgesPatch(
+    graph: SiteGraph,
+    patch: GraphPatch,
+    taken: Set<string>,
+): void {
     for (const e of patch.edges ?? []) {
         const id = uniqueId(
             e.id ?? `edge-${slug(e.sourceNode)}-to-${slug(e.targetNode)}`,
@@ -281,7 +292,13 @@ export function applyPatch(graph: SiteGraph, patch: GraphPatch): void {
             locator: e.locator,
         });
     }
+}
 
+function applyFieldsPatch(
+    graph: SiteGraph,
+    patch: GraphPatch,
+    taken: Set<string>,
+): void {
     for (const f of patch.fields ?? []) {
         const id = uniqueId(
             f.id ?? `field-${slug(f.semanticName)}-${slug(f.pageId)}`,
@@ -296,7 +313,13 @@ export function applyPatch(graph: SiteGraph, patch: GraphPatch): void {
             ...(f.valueShape ? { valueShape: f.valueShape } : {}),
         });
     }
+}
 
+function applyGoalsPatch(
+    graph: SiteGraph,
+    patch: GraphPatch,
+    taken: Set<string>,
+): void {
     for (const g of patch.goals ?? []) {
         const id = uniqueId(g.id ?? `goal-${slug(g.name)}`, taken);
         graph.goals.push({
@@ -306,7 +329,9 @@ export function applyPatch(graph: SiteGraph, patch: GraphPatch): void {
             targetPage: g.targetPage,
         });
     }
+}
 
+function applyApprovalsPatch(graph: SiteGraph, patch: GraphPatch): void {
     for (const a of patch.pendingApprovals ?? []) {
         if (!graph.pendingApprovals.some((p) => p.id === a.id)) {
             graph.pendingApprovals.push(a);
@@ -319,6 +344,24 @@ export function applyPatch(graph: SiteGraph, patch: GraphPatch): void {
             (a) => !done.has(a.id),
         );
     }
+}
+
+/**
+ * Apply a patch in place. Ids may be supplied explicitly so a patch can
+ * reference nodes it creates in the same call; otherwise readable ids are
+ * generated. The caller re-validates the whole graph before saving.
+ */
+export function applyPatch(graph: SiteGraph, patch: GraphPatch): void {
+    const taken = allIds(graph);
+    const now = new Date().toISOString();
+
+    applyVocabularyPatch(graph, patch);
+    applyPagesPatch(graph, patch, taken, now);
+    applyComponentsPatch(graph, patch, taken);
+    applyEdgesPatch(graph, patch, taken);
+    applyFieldsPatch(graph, patch, taken);
+    applyGoalsPatch(graph, patch, taken);
+    applyApprovalsPatch(graph, patch);
 
     if (patch.entryPageId) graph.entryPageId = patch.entryPageId;
 

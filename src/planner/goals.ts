@@ -123,24 +123,12 @@ const FIELD_SYNONYM_WEIGHT = 3;
 const PAGE_TYPE_WEIGHT = 4;
 const PAGE_URL_WEIGHT = 1;
 
-export function interpretQuestion(
-    graph: SiteGraph,
-    question: string,
-): Interpretation {
-    const tokens = new Set(tokenize(question));
-    if (tokens.size === 0) {
-        return {
-            kind: 'none',
-            confidence: 'low',
-            alternatives: [],
-            reason: 'the question carried no matchable words',
-        };
-    }
-
+/**
+ * Goals are named by the agent, so their names are the strongest signal —
+ * but only when the question covers most of the name.
+ */
+function scoreGoals(graph: SiteGraph, tokens: Set<string>): Scored[] {
     const scored: Scored[] = [];
-
-    // Goals are named by the agent, so their names are the strongest signal —
-    // but only when the question covers most of the name.
     for (const goal of graph.goals) {
         const goalTokens = tokenize(goal.name);
         if (goalTokens.length === 0) continue;
@@ -150,7 +138,11 @@ export function interpretQuestion(
             scored.push({ kind: 'goal', id: goal.id, label: goal.name, score });
         }
     }
+    return scored;
+}
 
+function scoreFields(graph: SiteGraph, tokens: Set<string>): Scored[] {
+    const scored: Scored[] = [];
     for (const name of fieldNamesInUse(graph)) {
         const nameTokens = name.split('-').map(stem);
         const own =
@@ -170,7 +162,11 @@ export function interpretQuestion(
             });
         }
     }
+    return scored;
+}
 
+function scorePages(graph: SiteGraph, tokens: Set<string>): Scored[] {
+    const scored: Scored[] = [];
     for (const page of graph.pages) {
         const typeTokens = page.type.split('-').map(stem);
         const typeMatch =
@@ -189,6 +185,55 @@ export function interpretQuestion(
             });
         }
     }
+    return scored;
+}
+
+/**
+ * A field beats a same-scoring page: "the price of a product" is a question
+ * about a value, and the page it lives on falls out of the plan anyway.
+ * `scored` must be non-empty.
+ */
+function chooseBest(scored: Scored[]): {
+    chosen: Scored;
+    runnerUp: Scored | undefined;
+} {
+    scored.sort((a, b) => b.score - a.score || a.id.localeCompare(b.id));
+    const best = scored[0]!;
+    const runnerUp = scored[1];
+
+    const tiedField = scored.find(
+        (s) => s.kind === 'field' && s.score === best.score,
+    );
+    const chosen = best.kind === 'page' && tiedField ? tiedField : best;
+    return { chosen, runnerUp };
+}
+
+function confidenceFor(chosen: Scored, runnerUp: Scored | undefined): Confidence {
+    if (chosen.score >= 4 && (!runnerUp || chosen.score > runnerUp.score)) {
+        return 'high';
+    }
+    return chosen.score >= 3 ? 'medium' : 'low';
+}
+
+export function interpretQuestion(
+    graph: SiteGraph,
+    question: string,
+): Interpretation {
+    const tokens = new Set(tokenize(question));
+    if (tokens.size === 0) {
+        return {
+            kind: 'none',
+            confidence: 'low',
+            alternatives: [],
+            reason: 'the question carried no matchable words',
+        };
+    }
+
+    const scored: Scored[] = [
+        ...scoreGoals(graph, tokens),
+        ...scoreFields(graph, tokens),
+        ...scorePages(graph, tokens),
+    ];
 
     if (scored.length === 0) {
         return {
@@ -199,31 +244,8 @@ export function interpretQuestion(
         };
     }
 
-    scored.sort((a, b) => b.score - a.score || a.id.localeCompare(b.id));
-    const best = scored[0];
-    if (!best) {
-        return {
-            kind: 'none',
-            confidence: 'low',
-            alternatives: [],
-            reason: 'no candidates',
-        };
-    }
-    const runnerUp = scored[1];
-
-    // A field beats a same-scoring page: "the price of a product" is a question
-    // about a value, and the page it lives on falls out of the plan anyway.
-    const tiedField = scored.find(
-        (s) => s.kind === 'field' && s.score === best.score,
-    );
-    const chosen = best.kind === 'page' && tiedField ? tiedField : best;
-
-    const confidence: Confidence =
-        chosen.score >= 4 && (!runnerUp || chosen.score > runnerUp.score)
-            ? 'high'
-            : chosen.score >= 3
-              ? 'medium'
-              : 'low';
+    const { chosen, runnerUp } = chooseBest(scored);
+    const confidence = confidenceFor(chosen, runnerUp);
 
     return {
         kind: chosen.kind,
