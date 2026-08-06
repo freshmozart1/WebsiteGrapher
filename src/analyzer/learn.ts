@@ -238,26 +238,7 @@ async function establishOverview(
         return { id: entryId, obs: entryObs };
     }
 
-    const found = await findOverview(page, entryObs, scope, budget, say);
-    if (!found) return null;
-
-    const overviewId = 'page-overview';
-    patch.pages!.push({
-        id: overviewId,
-        type: found.classification.type,
-        urlPattern: derivePattern([found.obs.url]),
-    });
-    const linkLocator = await synthesizeLocatorOn(page, found, say);
-    if (linkLocator) {
-        patch.edges!.push({
-            id: 'edge-entry-to-overview',
-            sourceNode: entryId,
-            targetNode: overviewId,
-            action: 'click',
-            locator: linkLocator,
-        });
-    }
-    return { id: overviewId, obs: found.obs };
+    return await findOverview(page, entryObs, scope, budget, patch, entryId, say);
 }
 
 /** Phase 3: record the overview page's repeating list as a component. */
@@ -622,14 +603,24 @@ function recordFieldGoals(patch: GraphPatch, detailId: string): void {
     }
 }
 
-/** Follow the site's own navigation until a page with a real list turns up. */
+/**
+ * Follow the site's own navigation until a page with a real list turns up.
+ *
+ * Every candidate visited along the way gets recorded as a page — with an
+ * edge back to the entry page when the link into it could be pinned down —
+ * whether or not it turns out to be the overview. The browser already paid
+ * for the visit; discarding a candidate that did not carry the list would
+ * throw that visit away, and it is still a page a user can reach.
+ */
 async function findOverview(
     page: Page,
     entry: PageObservation,
     scope: Scope,
     budget: Budget,
+    patch: GraphPatch,
+    entryId: string,
     say: (line: string) => void,
-) {
+): Promise<{ id: string; obs: PageObservation } | null> {
     const candidates = entry.elements
         .filter((el) => el.visible && el.tag === 'a' && el.href)
         .filter((el) => inScope(scope, el.href!).allowed)
@@ -643,23 +634,80 @@ async function findOverview(
         .sort((a, b) => rankLandmark(a.landmark) - rankLandmark(b.landmark));
 
     const seen = new Set<string>();
+    const deduped: NormalizedElement[] = [];
     for (const el of candidates) {
         const path = new URL(el.href!).pathname;
         if (seen.has(path)) continue;
         seen.add(path);
+        deduped.push(el);
+    }
+
+    // Locators can only be verified against the DOM that is currently loaded
+    // (`verifyLocator` runs `locator.count()` against whatever `page` shows),
+    // so every candidate's locator has to be synthesized now, in one pass,
+    // while `page` still shows the entry page — before any of the candidates
+    // below get visited and navigate away from it.
+    const locators = new Map<string, LocatorDefinition | null>();
+    for (const el of deduped) {
+        locators.set(el.ref, await synthesizeLocator(page, el));
+    }
+
+    let navCount = 0;
+    for (const el of deduped) {
         if (!budget.canVisit()) return null;
 
         budget.visit();
         await page.goto(el.href!, { waitUntil: 'domcontentloaded' });
         const obs = await observePage(page);
         const cluster = navigableCluster(obs);
-        if (!cluster) continue;
-
-        const classification = classifyPage(obs.signals, true);
+        const classification = classifyPage(obs.signals, cluster !== undefined);
+        const path = new URL(el.href!).pathname;
         say(
             `${path} -> ${classification.type} (${classification.reasons.join('; ')})`,
         );
-        return { obs, classification, element: el, entryUrl: entry.url };
+
+        if (cluster?.clickTargetCss) {
+            const overviewId = 'page-overview';
+            patch.pages!.push({
+                id: overviewId,
+                type: classification.type,
+                urlPattern: derivePattern([obs.url]),
+            });
+            const linkLocator = locators.get(el.ref) ?? null;
+            if (linkLocator) {
+                patch.edges!.push({
+                    id: 'edge-entry-to-overview',
+                    sourceNode: entryId,
+                    targetNode: overviewId,
+                    action: 'click',
+                    locator: linkLocator,
+                });
+            } else {
+                say('could not pin down the link into the overview page');
+            }
+            return { id: overviewId, obs };
+        }
+
+        // No usable list here, but it is still a page a user can reach: record
+        // it and the nav edge into it (when the link resolved) rather than
+        // silently discarding a visit the budget already paid for.
+        navCount++;
+        const navId = `page-nav-${navCount}`;
+        patch.pages!.push({
+            id: navId,
+            type: classification.type,
+            urlPattern: derivePattern([obs.url]),
+        });
+        const navLocator = locators.get(el.ref) ?? null;
+        if (navLocator) {
+            patch.edges!.push({
+                id: `edge-entry-to-nav-${navCount}`,
+                sourceNode: entryId,
+                targetNode: navId,
+                action: 'click',
+                locator: navLocator,
+            });
+        }
     }
     return null;
 }
@@ -674,22 +722,6 @@ function rankLandmark(landmark: string | null): number {
     if (landmark === 'main' || landmark === null) return 1;
     if (landmark === 'header') return 2;
     return 3; // footer, aside
-}
-
-/** The link that got us to the overview, located on the entry page. */
-async function synthesizeLocatorOn(
-    page: Page,
-    found: { element: { ref: string }; entryUrl: string },
-    say: (line: string) => void,
-) {
-    const current = page.url();
-    await page.goto(found.entryUrl, { waitUntil: 'domcontentloaded' });
-    const entryAgain = await observePage(page);
-    const el = entryAgain.elements.find((e) => e.ref === found.element.ref);
-    const locator = el ? await synthesizeLocator(page, el) : null;
-    if (!locator) say('could not pin down the link into the overview page');
-    await page.goto(current, { waitUntil: 'domcontentloaded' });
-    return locator;
 }
 
 async function gotoIfNeeded(page: Page, url: string): Promise<void> {
