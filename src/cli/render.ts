@@ -2,6 +2,11 @@ import { describeLocator } from '../graph/describe.js';
 import type { PageNode, SiteGraph } from '../graph/schema.js';
 import { vocabularyReport } from '../graph/mutate.js';
 import type { Plan } from '../planner/plan.js';
+import type { PageObservation } from '../analyzer/observe.js';
+import type { RepetitionCluster } from '../analyzer/structure.js';
+import type { Classification } from '../analyzer/classify.js';
+import type { NormalizedElement } from '../analyzer/elements.js';
+import type { FieldCandidate } from '../analyzer/fields.js';
 
 /** Everything the CLI prints for humans lives here, so the commands stay
  *  concerned only with what they do. */
@@ -43,6 +48,66 @@ export function renderPlan(plan: Plan): string {
     if (plan.notes.length > 0) {
         lines.push('', ...plan.notes.map((n) => `Note: ${n}`));
     }
+    return lines.join('\n');
+}
+
+/** What `wgraph observe` prints for a human: the full text report built from
+ *  one page's observation, draft classification, and risk tiers. */
+export function renderObservation(result: {
+    observation: PageObservation;
+    cluster: RepetitionCluster | undefined;
+    draft: Classification;
+    tiers: {
+        safe: NormalizedElement[];
+        confirm: NormalizedElement[];
+        blocked: NormalizedElement[];
+    };
+    fields: FieldCandidate[] | null;
+}): string {
+    const { observation, cluster, draft, tiers, fields } = result;
+    const lines = [
+        `${observation.url}`,
+        `"${observation.title}"`,
+        '',
+        `Draft page type: ${draft.type} (${draft.confidence}) — ${draft.reasons.join('; ')}`,
+        `  This is a guess from counted signals. Overrule it if the page does not fit.`,
+        '',
+        `Elements: ${observation.elements.length}  ` +
+            `(${tiers.safe.length} safe to probe, ${tiers.confirm.length} need approval, ` +
+            `${tiers.blocked.length} off limits)`,
+        `Accessibility tree: ${observation.accessibility ? `${observation.accessibility.length} nodes` : 'unavailable'}`,
+    ];
+
+    if (cluster) {
+        lines.push(
+            '',
+            `List: ${cluster.count} x ${cluster.itemCss} in ${cluster.containerCss}`,
+            `  click target: ${cluster.clickTargetCss ?? 'none'}`,
+        );
+    } else {
+        lines.push('', 'List: none found');
+    }
+
+    const rejected = observation.clusters.filter((c) => c.excluded);
+    if (rejected.length > 0) {
+        lines.push('', 'Rejected repeating structures:');
+        for (const c of rejected) {
+            lines.push(`  ${c.count} x ${c.itemCss} — ${c.exclusionReason}`);
+        }
+    }
+
+    if (fields) {
+        lines.push('', 'Field candidates:');
+        for (const f of fields) {
+            lines.push(
+                `  ${f.suggestedName.padEnd(14)} ${f.css}  (${f.confidence}: ${f.reason})`,
+            );
+        }
+    }
+
+    if (observation.screenshot)
+        lines.push('', `Screenshot: ${observation.screenshot}`);
+
     return lines.join('\n');
 }
 
