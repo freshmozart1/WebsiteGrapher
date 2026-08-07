@@ -13,6 +13,8 @@ const SESSION_USAGE = `wgraph session <subcommand> [args...]
 
 Each subcommand also accepts -h / --help for its own usage.`;
 
+const SESSION_LIST_USAGE = `wgraph session list — Saved browser state.`;
+
 const SESSION_CLEAR_USAGE = `wgraph session clear <name>
 
 Delete the saved cookies and last URL for one session.`;
@@ -25,6 +27,10 @@ export async function sessionCommand(argv: string[]): Promise<number> {
     }
     switch (sub) {
         case 'list': {
+            if (isHelpFlag(argv.slice(1))) {
+                console.log(SESSION_LIST_USAGE);
+                return EXIT.OK;
+            }
             const sessions = await listSessions();
             if (sessions.length === 0) {
                 console.log(

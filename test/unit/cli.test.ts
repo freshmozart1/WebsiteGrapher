@@ -407,4 +407,13 @@ describe('wgraph session', () => {
         expect(printed()).toContain('wgraph session clear <name>');
         expect(printed()).not.toContain('Cleared saved state for "--help"');
     });
+
+    it.each(['-h', '--help'])(
+        'prints usage for "session list %s" instead of listing sessions',
+        async (flag) => {
+            expect(await sessionCommand(['list', flag])).toBe(EXIT.OK);
+            expect(printed()).toContain('wgraph session list');
+            expect(printed()).not.toMatch(/No saved sessions/);
+        },
+    );
 });
