@@ -621,6 +621,65 @@ async function findOverview(
     entryId: string,
     say: (line: string) => void,
 ): Promise<{ id: string; obs: PageObservation } | null> {
+    const deduped = rankedNavCandidates(entry, scope);
+
+    // Locators can only be verified against the DOM that is currently loaded
+    // (`verifyLocator` runs `locator.count()` against whatever `page` shows),
+    // so every candidate's locator has to be synthesized now, in one pass,
+    // while `page` still shows the entry page — before any of the candidates
+    // below get visited and navigate away from it.
+    const locators = await synthesizeCandidateLocators(page, deduped);
+
+    let navCount = 0;
+    for (const el of deduped) {
+        if (!budget.canVisit()) return null;
+
+        budget.visit();
+        await page.goto(el.href!, { waitUntil: 'domcontentloaded' });
+        const obs = await observePage(page);
+        const cluster = navigableCluster(obs);
+        const classification = classifyPage(obs.signals, cluster !== undefined);
+        const path = new URL(el.href!).pathname;
+        say(
+            `${path} -> ${classification.type} (${classification.reasons.join('; ')})`,
+        );
+        const linkLocator = locators.get(el.ref) ?? null;
+
+        if (cluster?.clickTargetCss) {
+            return recordOverviewCandidate(
+                patch,
+                entryId,
+                classification,
+                obs,
+                linkLocator,
+                say,
+            );
+        }
+
+        // No usable list here, but it is still a page a user can reach: record
+        // it and the nav edge into it (when the link resolved) rather than
+        // silently discarding a visit the budget already paid for.
+        navCount++;
+        recordNavCandidate(
+            patch,
+            entryId,
+            navCount,
+            classification,
+            obs,
+            linkLocator,
+        );
+    }
+    return null;
+}
+
+/**
+ * Entry-page links worth following in search of the overview page, deduped
+ * by path and ranked so nav/main links are tried before header/footer ones.
+ */
+function rankedNavCandidates(
+    entry: PageObservation,
+    scope: Scope,
+): NormalizedElement[] {
     const candidates = entry.elements
         .filter((el) => el.visible && el.tag === 'a' && el.href)
         .filter((el) => inScope(scope, el.href!).allowed)
@@ -641,75 +700,73 @@ async function findOverview(
         seen.add(path);
         deduped.push(el);
     }
+    return deduped;
+}
 
-    // Locators can only be verified against the DOM that is currently loaded
-    // (`verifyLocator` runs `locator.count()` against whatever `page` shows),
-    // so every candidate's locator has to be synthesized now, in one pass,
-    // while `page` still shows the entry page — before any of the candidates
-    // below get visited and navigate away from it.
+async function synthesizeCandidateLocators(
+    page: Page,
+    candidates: NormalizedElement[],
+): Promise<Map<string, LocatorDefinition | null>> {
     const locators = new Map<string, LocatorDefinition | null>();
-    for (const el of deduped) {
+    for (const el of candidates) {
         locators.set(el.ref, await synthesizeLocator(page, el));
     }
+    return locators;
+}
 
-    let navCount = 0;
-    for (const el of deduped) {
-        if (!budget.canVisit()) return null;
-
-        budget.visit();
-        await page.goto(el.href!, { waitUntil: 'domcontentloaded' });
-        const obs = await observePage(page);
-        const cluster = navigableCluster(obs);
-        const classification = classifyPage(obs.signals, cluster !== undefined);
-        const path = new URL(el.href!).pathname;
-        say(
-            `${path} -> ${classification.type} (${classification.reasons.join('; ')})`,
-        );
-
-        if (cluster?.clickTargetCss) {
-            const overviewId = 'page-overview';
-            patch.pages!.push({
-                id: overviewId,
-                type: classification.type,
-                urlPattern: derivePattern([obs.url]),
-            });
-            const linkLocator = locators.get(el.ref) ?? null;
-            if (linkLocator) {
-                patch.edges!.push({
-                    id: 'edge-entry-to-overview',
-                    sourceNode: entryId,
-                    targetNode: overviewId,
-                    action: 'click',
-                    locator: linkLocator,
-                });
-            } else {
-                say('could not pin down the link into the overview page');
-            }
-            return { id: overviewId, obs };
-        }
-
-        // No usable list here, but it is still a page a user can reach: record
-        // it and the nav edge into it (when the link resolved) rather than
-        // silently discarding a visit the budget already paid for.
-        navCount++;
-        const navId = `page-nav-${navCount}`;
-        patch.pages!.push({
-            id: navId,
-            type: classification.type,
-            urlPattern: derivePattern([obs.url]),
+/** The candidate carries the list: record it as the overview page. */
+function recordOverviewCandidate(
+    patch: GraphPatch,
+    entryId: string,
+    classification: ReturnType<typeof classifyPage>,
+    obs: PageObservation,
+    linkLocator: LocatorDefinition | null,
+    say: (line: string) => void,
+): { id: string; obs: PageObservation } {
+    const overviewId = 'page-overview';
+    patch.pages!.push({
+        id: overviewId,
+        type: classification.type,
+        urlPattern: derivePattern([obs.url]),
+    });
+    if (linkLocator) {
+        patch.edges!.push({
+            id: 'edge-entry-to-overview',
+            sourceNode: entryId,
+            targetNode: overviewId,
+            action: 'click',
+            locator: linkLocator,
         });
-        const navLocator = locators.get(el.ref) ?? null;
-        if (navLocator) {
-            patch.edges!.push({
-                id: `edge-entry-to-nav-${navCount}`,
-                sourceNode: entryId,
-                targetNode: navId,
-                action: 'click',
-                locator: navLocator,
-            });
-        }
+    } else {
+        say('could not pin down the link into the overview page');
     }
-    return null;
+    return { id: overviewId, obs };
+}
+
+/** No usable list on this candidate, but it is still a page a user can reach. */
+function recordNavCandidate(
+    patch: GraphPatch,
+    entryId: string,
+    navCount: number,
+    classification: ReturnType<typeof classifyPage>,
+    obs: PageObservation,
+    navLocator: LocatorDefinition | null,
+): void {
+    const navId = `page-nav-${navCount}`;
+    patch.pages!.push({
+        id: navId,
+        type: classification.type,
+        urlPattern: derivePattern([obs.url]),
+    });
+    if (navLocator) {
+        patch.edges!.push({
+            id: `edge-entry-to-nav-${navCount}`,
+            sourceNode: entryId,
+            targetNode: navId,
+            action: 'click',
+            locator: navLocator,
+        });
+    }
 }
 
 /** The best repeating cluster whose items actually lead somewhere. */
