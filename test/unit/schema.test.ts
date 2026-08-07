@@ -130,4 +130,33 @@ describe('SiteGraphSchema', () => {
         g.components[0]!.locator = {};
         expect(issuesOf(g).join('\n')).toMatch(/at least one hint/);
     });
+
+    describe('overlay pages', () => {
+        it('accepts an overlay page sharing a urlPattern with another page', () => {
+            const g = bookshopGraph();
+            const overlay = g.pages.find((p) => p.id === 'page-contact')!;
+            const detail = g.pages.find((p) => p.id === 'page-detail')!;
+            expect(overlay.overlay).toBe(true);
+            expect(overlay.urlPattern).toBe(detail.urlPattern);
+            expect(issuesOf(g)).toEqual([]);
+        });
+
+        it('accepts an edge whose target is an overlay page', () => {
+            const g = bookshopGraph();
+            const edge = g.edges.find(
+                (e) => e.id === 'edge-detail-to-contact',
+            )!;
+            const target = g.pages.find((p) => p.id === edge.targetNode);
+            expect(target?.overlay).toBe(true);
+            expect(issuesOf(g)).toEqual([]);
+        });
+
+        it('rejects an entryPageId that resolves to an overlay page', () => {
+            const g = bookshopGraph();
+            g.entryPageId = 'page-contact';
+            expect(issuesOf(g).join('\n')).toMatch(
+                /entryPageId "page-contact" cannot be an overlay page/,
+            );
+        });
+    });
 });

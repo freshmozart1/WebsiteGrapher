@@ -117,6 +117,17 @@ describe('wgraph plan', () => {
         expect(printed()).toContain('The availability is on the detail page');
     });
 
+    it('describes routing to an overlay page as opening an overlay', async () => {
+        const code = await planCommand([
+            'books.toscrape.com',
+            '--page',
+            'page-contact',
+        ]);
+        expect(code).toBe(EXIT.OK);
+        expect(printed()).toContain('to reach the form overlay');
+        expect(printed()).toContain('That opens the form overlay.');
+    });
+
     it('returns a gap code for a field the site does not have', async () => {
         expect(
             await planCommand([
@@ -260,6 +271,12 @@ describe('wgraph graph', () => {
         await saveGraph('books.toscrape.com', bookshopGraph());
         await graphCommand(['show', 'books.toscrape.com']);
         expect(printed()).toMatch(/page-home.*<- entry/);
+    });
+
+    it('annotates an overlay page when showing a graph', async () => {
+        await saveGraph('books.toscrape.com', bookshopGraph());
+        await graphCommand(['show', 'books.toscrape.com']);
+        expect(printed()).toMatch(/page-contact\s+\[form\].*\(overlay\)/);
     });
 
     it('rejects an unknown subcommand', async () => {

@@ -30,6 +30,10 @@ export function renderPlan(plan: Plan): string {
             `${plan.steps.length + 1}. The ${plan.field.semanticName} is on the ` +
                 `${plan.destination.pageType} page at ${describeLocator(plan.field.locator)}.`,
         );
+    } else if (plan.destination.overlay) {
+        lines.push(
+            `${plan.steps.length + 1}. That opens the ${plan.destination.pageType} overlay.`,
+        );
     } else {
         lines.push(
             `${plan.steps.length + 1}. That is the ${plan.destination.pageType} page ` +
@@ -83,7 +87,7 @@ function renderStateDimensionLines(page: PageNode): string[] {
 function renderPageSection(graph: SiteGraph, page: PageNode): string[] {
     const entry = page.id === graph.entryPageId ? '  <- entry' : '';
     return [
-        `  ${page.id}  [${page.type}]  ${page.urlPattern}${entry}`,
+        `  ${page.id}  [${page.type}]  ${page.urlPattern}${page.overlay ? '  (overlay)' : ''}${entry}`,
         ...renderComponentLines(graph, page.id),
         ...renderFieldLines(graph, page.id),
         ...renderStateDimensionLines(page),

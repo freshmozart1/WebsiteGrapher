@@ -211,6 +211,11 @@ const PageNodeSchema = z.object({
     type: vocabName,
     /** Derived pattern such as `/catalogue/:slug`, never a list of visited URLs. */
     urlPattern: nonEmpty,
+    /** True when this page has no URL of its own: it opens as an overlay
+     *  (dialog, drawer, accordion panel...) on top of another page rather than
+     *  being navigated to. `urlPattern` is then the URL of the page it appears
+     *  on top of, which is why no uniqueness is enforced across pages. */
+    overlay: z.boolean().optional(),
     components: z.array(nonEmpty),
     stateDimensions: z.array(StateDimensionSchema).optional(),
     learnedAt: nonEmpty,
@@ -261,7 +266,9 @@ const ActionEdgeSchema = z.object({
     /** A page or a component. */
     sourceNode: nonEmpty,
     /** Always a page: edges model navigation. In-page state changes are
-     *  `stateDimensions`, not edges. */
+     *  `stateDimensions`, not edges. An overlay page still counts as "a page"
+     *  for this rule — that's what makes a trigger's edge to a URL-less
+     *  dialog/drawer/panel representable at all. */
     targetNode: nonEmpty,
     action: ActionSchema,
     locator: LocatorDefinitionSchema,
@@ -372,6 +379,14 @@ export const SiteGraphSchema = SiteGraphShape.superRefine((g, ctx) => {
         fail(
             ['entryPageId'],
             `entryPageId "${g.entryPageId}" is not a known page`,
+        );
+    }
+
+    const entryPage = g.pages.find((p) => p.id === g.entryPageId);
+    if (entryPage?.overlay) {
+        fail(
+            ['entryPageId'],
+            `entryPageId "${g.entryPageId}" cannot be an overlay page (it has no independent URL to start from)`,
         );
     }
 

@@ -34,7 +34,12 @@ export interface PlanOk {
     ok: true;
     question?: string;
     steps: PlanStep[];
-    destination: { pageId: string; pageType: string; urlPattern: string };
+    destination: {
+        pageId: string;
+        pageType: string;
+        urlPattern: string;
+        overlay: boolean;
+    };
     field?: {
         id: string;
         semanticName: string;
@@ -125,6 +130,7 @@ export function buildPlan(
             pageId: destination.id,
             pageType: destination.type,
             urlPattern: destination.urlPattern,
+            overlay: destination.overlay ?? false,
         },
         ...(chosen.field
             ? {
@@ -258,7 +264,11 @@ function toPlanStep(graph: SiteGraph, step: PathStep, index: number): PlanStep {
             : source
               ? `${describeLocator(step.edge.locator)} in the ${source.type}`
               : describeLocator(step.edge.locator);
-    const where = to ? `the ${to.type} page` : step.toPage;
+    const where = to
+        ? to.overlay
+            ? `the ${to.type} overlay`
+            : `the ${to.type} page`
+        : step.toPage;
     const description =
         step.edge.action === 'navigate'
             ? `Go to ${where} (${to?.urlPattern ?? step.toPage})`

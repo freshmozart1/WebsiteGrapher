@@ -178,7 +178,7 @@ describe('withGraph', () => {
         // A second call would time out on a leaked lock.
         await expect(
             withGraph('books.toscrape.com', (g) => g.pages.length),
-        ).resolves.toMatchObject({ result: 3 });
+        ).resolves.toMatchObject({ result: 4 });
     });
 
     it('serialises concurrent writers instead of dropping one', async () => {
