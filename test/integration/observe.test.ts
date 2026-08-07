@@ -120,6 +120,38 @@ describe('observing the product list', () => {
     });
 });
 
+describe('observing a row-split grid with hashed classnames', () => {
+    it('merges the two row containers into one six-item cluster', async () => {
+        const obs = await observe('/careers.html');
+        const top = primaryCluster(obs.clusters);
+        expect(top).toBeDefined();
+        expect(top!.count).toBe(6);
+        expect(top!.itemCss).toBe('div.role-card.role-card-d4e5f6');
+    });
+
+    it('reports the grid wrapper as the container, not a single row', async () => {
+        await withPage({ url: `${site.url}/careers.html` }, async (page) => {
+            const obs = await observePage(page);
+            const top = primaryCluster(obs.clusters)!;
+            const element = await page.$(top.containerCss);
+            expect(element).not.toBeNull();
+            const childCount = await element!.evaluate(
+                (el) => el.children.length,
+            );
+            // The two row wrappers, not the six cards a mispicked row would have.
+            expect(childCount).toBe(2);
+        });
+    });
+
+    it('does not also report the individual rows as separate clusters', async () => {
+        const obs = await observe('/careers.html');
+        const cardFragments = obs.clusters.filter((c) =>
+            c.itemCss.startsWith('div.role-card'),
+        );
+        expect(cardFragments.length).toBe(1);
+    });
+});
+
 describe('observing a detail page', () => {
     it('looks like an item URL and carries a single h1', async () => {
         const obs = await observe('/product/2.html');

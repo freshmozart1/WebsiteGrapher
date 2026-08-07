@@ -340,6 +340,48 @@ export function aboutPage(): string {
     );
 }
 
+/**
+ * A page-builder-style grid: six role cards split 3+3 across two row
+ * wrappers, each row and each card carrying its own per-instance hash class
+ * (the way Elementor, Webflow and CSS Modules all generate markup) alongside
+ * a shared structural class. Exercises both `structure.ts` fixes together —
+ * without hash normalization, not even one row's three cards would bucket
+ * together; the row-merge pass is what then reads the two rows as one
+ * six-item cluster instead of two three-item fragments.
+ */
+function roleCard(hash: string, slug: string, title: string): string {
+    return `
+        <div class="role-card role-card-${hash}">
+          <h3>${title}</h3>
+          <a href="/careers/${slug}.html">View role</a>
+        </div>`;
+}
+
+export function careersPage(): string {
+    return shell(
+        'Careers — Fixture Bookshop',
+        `
+    <h1>Careers</h1>
+    <div class="grid-wrap">
+      <div class="role-row role-row-a1b2c3">
+        ${roleCard('d4e5f6', 'engineer', 'Software Engineer')}
+        ${roleCard('a7b8c9', 'designer', 'Product Designer')}
+        ${roleCard('1a2b3c', 'analyst', 'Data Analyst')}
+      </div>
+      <div class="role-row role-row-4d5e6f">
+        ${roleCard('7a8b9c', 'manager', 'Engineering Manager')}
+        ${roleCard('3c4d5e', 'writer', 'Technical Writer')}
+        ${roleCard('9e0f1a', 'recruiter', 'Recruiter')}
+      </div>
+    </div>`,
+        `<style>
+      .grid-wrap { display: flex; flex-direction: column; gap: 1rem; }
+      .role-row { display: flex; gap: 1rem; }
+      .role-card { width: 200px; height: 150px; border: 1px solid #ccc; padding: 1rem; box-sizing: border-box; }
+    </style>`,
+    );
+}
+
 function coverSvg(product: Product): string {
     return `<svg xmlns="http://www.w3.org/2000/svg" width="120" height="160" viewBox="0 0 120 160">
   <rect width="120" height="160" fill="#eef"/>
@@ -361,6 +403,7 @@ export function routes(): Map<string, { body: string; type: string }> {
     map.set('/contact.html', html(contactPage()));
     map.set('/account.html', html(accountPage()));
     map.set('/about.html', html(aboutPage()));
+    map.set('/careers.html', html(careersPage()));
 
     for (const product of PRODUCTS) {
         map.set(`/product/${product.id}.html`, html(detailPage(product)));

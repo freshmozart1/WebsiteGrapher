@@ -10,6 +10,15 @@ import type { DomHelpers } from '../browser/dom-helpers.js';
  * twenty-item product grid.
  *
  * No content is read: signatures are built from tags and classes only.
+ *
+ * Two complications, both common in page-builder output (Elementor, Webflow,
+ * CSS Modules): first, signatures strip a trailing per-instance hash class
+ * (`elementor-element-74a0f97`) before comparing, since otherwise
+ * structurally identical siblings never bucket together. Second, a grid is
+ * sometimes split across several row containers rather than sitting under one
+ * parent, so a second pass looks for sibling rows whose own children resolve
+ * to the same item signature and folds them into a single cluster before
+ * ranking.
  */
 export interface RepetitionCluster {
     /** CSS selector for the element holding the repeated children. */
@@ -44,16 +53,75 @@ const MAX_CLUSTERS = 8;
  */
 const MIN_AREA_SHARE = 0.02;
 const LANDMARKS = ['nav', 'header', 'footer'];
+/**
+ * A single row is just a container with children — it takes at least two
+ * rows to show that the *rows themselves* repeat, which is the evidence a
+ * split grid needs before its fragments are worth merging.
+ */
+const MIN_ROWS = 2;
+/**
+ * Below this length a hex-looking token is more likely a short real word
+ * (`nav`, `card`) than a generated hash. Longer per-instance hashes are safe
+ * to strip on sight.
+ */
+const HASH_SUFFIX_MIN_LENGTH = 5;
 
 export async function findRepetition(page: Page): Promise<RepetitionCluster[]> {
     return await page.evaluate(
-        ({ minItems, maxClusters, minAreaShare, landmarks }) => {
+        ({
+            minItems,
+            maxClusters,
+            minAreaShare,
+            landmarks,
+            minRows,
+            hashSuffixMinLength,
+        }) => {
             const wg: DomHelpers = window.__wgraph;
+
+            // Page builders append a unique per-instance hash to every class
+            // (`elementor-element-74a0f97`), so a class token is only treated as a
+            // hash suffix if every character is hex AND at least one is a digit.
+            // That second condition is what makes this safe: an English word like
+            // `face`, `cafe`, `dead` or `facade` is made entirely of hex letters
+            // but has no digits, so it always fails this test and is never
+            // mistaken for a generated hash.
+            const HEX_WITH_DIGIT = /^[0-9a-f]*[0-9][0-9a-f]*$/i;
+
+            /**
+             * Strips a trailing per-instance hash segment from a class token, so
+             * `elementor-element-74a0f97` and `elementor-element-1249c5d` both
+             * normalize to `elementor-element` and bucket together. A token with
+             * no hyphen, or whose last segment doesn't look like a hash, is
+             * returned unchanged. A token that *is* the hash (no prefix left
+             * after stripping) carries no structural signal, so it is dropped.
+             */
+            function normalizeClassToken(token: string): string | null {
+                const lastHyphen = token.lastIndexOf('-');
+                if (lastHyphen === -1) return token;
+                const suffix = token.slice(lastHyphen + 1);
+                if (
+                    suffix.length >= hashSuffixMinLength &&
+                    HEX_WITH_DIGIT.test(suffix)
+                ) {
+                    const prefix = token.slice(0, lastHyphen);
+                    return prefix.length > 0 ? prefix : null;
+                }
+                return token;
+            }
 
             /** Tag + classes + child tag sequence. Deliberately ignores text. */
             function signatureOf(el: Element): string {
-                const classes = Array.prototype.slice
-                    .call(el.classList)
+                const classes = Array.from(
+                    new Set(
+                        (
+                            Array.prototype.slice.call(
+                                el.classList,
+                            ) as string[]
+                        )
+                            .map(normalizeClassToken)
+                            .filter((c): c is string => c !== null),
+                    ),
+                )
                     .sort()
                     .join('.');
                 const children = Array.prototype.map
@@ -169,19 +237,116 @@ export async function findRepetition(page: Page): Promise<RepetitionCluster[]> {
                 };
             }
 
+            /** `container`'s direct children, grouped by signature, biggest bucket
+             *  first — or null if there are no children to group at all. */
+            function largestBucket(container: Element): Element[] | null {
+                if (container.children.length === 0) return null;
+                let best: Element[] | null = null;
+                for (const [, items] of groupBySignature(container)) {
+                    if (!best || items.length > best.length) best = items;
+                }
+                return best;
+            }
+
+            /** Whether `row` itself looks like it holds a repeating list, and if
+             *  so, the signature that list's items share. A row that fails this
+             *  is not evidence of a split grid — it's just some other element. */
+            function rowItemSignature(
+                row: Element,
+            ): { sig: string; items: Element[] } | null {
+                const bucket = largestBucket(row);
+                if (!bucket || bucket.length < minItems) return null;
+                const first = bucket[0];
+                if (!first) return null;
+                return { sig: signatureOf(first), items: bucket };
+            }
+
+            /**
+             * A grid is sometimes split across several row wrappers instead of
+             * sitting under one parent (Elementor's column layout does this).
+             * For every candidate `wrapper`, group its direct children — the
+             * candidate rows — by signature. A bucket of rows only merges when
+             * *every* row in it independently looks like a repeating list, and
+             * all of those lists share one item signature; a wrapper with one
+             * real row of cards next to an unrelated same-shaped row of, say,
+             * testimonials should not be forced together.
+             */
+            function findMergedClusters(
+                allContainers: Element[],
+            ): { cluster: RepetitionCluster; subsumedRows: Element[] }[] {
+                const merges: {
+                    cluster: RepetitionCluster;
+                    subsumedRows: Element[];
+                }[] = [];
+
+                for (const wrapper of allContainers) {
+                    if (wrapper.children.length < minRows) continue;
+
+                    for (const [, candidateRows] of groupBySignature(
+                        wrapper,
+                    )) {
+                        if (candidateRows.length < minRows) continue;
+
+                        const resolved = candidateRows.map(rowItemSignature);
+                        if (resolved.some((r) => r === null)) continue;
+                        const rows = resolved as {
+                            sig: string;
+                            items: Element[];
+                        }[];
+
+                        const firstRow = rows[0];
+                        if (!firstRow) continue;
+                        if (rows.some((r) => r.sig !== firstRow.sig)) {
+                            continue;
+                        }
+
+                        const flattenedItems = rows.flatMap((r) => r.items);
+                        if (flattenedItems.length < minItems) continue;
+
+                        const cluster = buildCluster(wrapper, flattenedItems);
+                        if (cluster) {
+                            merges.push({
+                                cluster,
+                                subsumedRows: candidateRows,
+                            });
+                        }
+                    }
+                }
+
+                return merges;
+            }
+
             const clusters: RepetitionCluster[] = [];
             const containers = Array.prototype.slice.call(
                 document.querySelectorAll('*'),
             ) as Element[];
 
+            const merges = findMergedClusters(containers);
+            const subsumedRows = new Set<Element>();
+            for (const merge of merges) {
+                for (const row of merge.subsumedRows) subsumedRows.add(row);
+            }
+
             for (const container of containers) {
+                // Its children were already folded into a merged cluster one
+                // level up; its own fragment would just re-describe a subset.
+                if (subsumedRows.has(container)) continue;
                 if (container.children.length < minItems) continue;
 
                 for (const [, items] of groupBySignature(container)) {
                     if (items.length < minItems) continue;
+                    // The "read these rows themselves as the repeated items"
+                    // reading of the same wrapper the merge above already covers.
+                    if (items.every((item) => subsumedRows.has(item))) {
+                        continue;
+                    }
                     const cluster = buildCluster(container, items);
                     if (cluster) clusters.push(cluster);
                 }
+            }
+
+            for (const merge of merges) {
+                clusters.push(merge.cluster);
             }
 
             // Plausible lists first; excluded ones are kept at the end so the agent
@@ -197,6 +362,8 @@ export async function findRepetition(page: Page): Promise<RepetitionCluster[]> {
             maxClusters: MAX_CLUSTERS,
             minAreaShare: MIN_AREA_SHARE,
             landmarks: LANDMARKS,
+            minRows: MIN_ROWS,
+            hashSuffixMinLength: HASH_SUFFIX_MIN_LENGTH,
         },
     );
 }
