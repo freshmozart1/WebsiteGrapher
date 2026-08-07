@@ -87,19 +87,6 @@ export async function extractElements(
                 return IMPLICIT_ROLE[tag] ?? null;
             }
 
-            function isVisible(el: Element): boolean {
-                const style = window.getComputedStyle(el);
-                if (
-                    style.display === 'none' ||
-                    style.visibility === 'hidden' ||
-                    Number(style.opacity) === 0
-                ) {
-                    return false;
-                }
-                const box = el.getBoundingClientRect();
-                return box.width > 0 && box.height > 0;
-            }
-
             function labelFor(el: Element): string | null {
                 const id = el.getAttribute('id');
                 if (id) {
@@ -165,7 +152,7 @@ export async function extractElements(
                     disabled:
                         el.hasAttribute('disabled') ||
                         el.getAttribute('aria-disabled') === 'true',
-                    visible: isVisible(el),
+                    visible: wg.isVisible(el),
                     boundingBox:
                         box.width > 0 || box.height > 0
                             ? {

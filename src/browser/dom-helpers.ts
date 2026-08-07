@@ -44,6 +44,11 @@ export interface DomHelpers {
      * list inside `<aside>` inside `<footer>` is still in the footer.
      */
     landmarkOf(el: Element, tags?: readonly string[]): string | null;
+
+    /** Whether `el` renders with a nonzero box: not `display: none`,
+     *  `visibility: hidden` or fully transparent, and not collapsed by a
+     *  hidden ancestor (`getBoundingClientRect` catches that case too). */
+    isVisible(el: Element): boolean;
 }
 
 declare global {
@@ -121,7 +126,9 @@ function installDomHelpers(): void {
         options?: { preferTestId?: boolean },
     ): string {
         return (
-            uniqueIdSelector(el) ?? testIdSelector(el, options) ?? positionalPath(el)
+            uniqueIdSelector(el) ??
+            testIdSelector(el, options) ??
+            positionalPath(el)
         );
     }
 
@@ -151,9 +158,22 @@ function installDomHelpers(): void {
         return null;
     }
 
+    function isVisible(el: Element): boolean {
+        const style = window.getComputedStyle(el);
+        if (
+            style.display === 'none' ||
+            style.visibility === 'hidden' ||
+            Number(style.opacity) === 0
+        ) {
+            return false;
+        }
+        const box = el.getBoundingClientRect();
+        return box.width > 0 && box.height > 0;
+    }
+
     // Non-enumerable, so the page sees as little of us as possible.
     Object.defineProperty(window, '__wgraph', {
-        value: { cssPathOf, relativePath, landmarkOf },
+        value: { cssPathOf, relativePath, landmarkOf, isVisible },
         configurable: true,
     });
 }
