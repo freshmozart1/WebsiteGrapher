@@ -319,6 +319,27 @@ export function contactPage(): string {
     );
 }
 
+/** A POST form hidden behind a `.hidden` wrapper, as an Elementor popup form
+ *  is until its trigger button is clicked: nothing inside it is visible on
+ *  load, so it must not be counted as a form. */
+export function popupFormPage(): string {
+    return shell(
+        'Careers — Fixture Bookshop',
+        `
+    <h1>Careers</h1>
+    <div class="hidden">
+      <form method="post" action="/apply">
+        <label for="popup-email">Email</label>
+        <input id="popup-email" name="email" type="email" required>
+        <label for="popup-message">Message</label>
+        <textarea id="popup-message" name="message"></textarea>
+        <label for="popup-subscribe"><input id="popup-subscribe" name="subscribe" type="checkbox"> Subscribe to the newsletter</label>
+        <button type="submit">Send message</button>
+      </form>
+    </div>`,
+    );
+}
+
 /** Controls whose labels alone should keep the learner away from them. */
 export function accountPage(): string {
     return shell(
@@ -401,6 +422,7 @@ export function routes(): Map<string, { body: string; type: string }> {
     map.set('/feed.html', html(infiniteScrollPage()));
     map.set('/search.html', html(searchPage()));
     map.set('/contact.html', html(contactPage()));
+    map.set('/popup-form.html', html(popupFormPage()));
     map.set('/account.html', html(accountPage()));
     map.set('/about.html', html(aboutPage()));
     map.set('/careers.html', html(careersPage()));
