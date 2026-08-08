@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.3.0] - 2026-08-08
+
+### Added
+
+- Page nodes can now be marked `overlay: true` to represent an in-page dialog, drawer or popup that has no URL of its own, reachable through the existing edge and planner machinery unchanged. (closes #3)
+
 ## [0.2.1] - 2026-08-08
 
 ### Fixed

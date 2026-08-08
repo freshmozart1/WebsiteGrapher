@@ -257,6 +257,30 @@ describe('applyPatch', () => {
         expect(g.pendingApprovals).toHaveLength(0);
     });
 
+    it('round-trips the overlay flag onto the stored page', () => {
+        const g = emptyGraph('https://shop.example');
+        applyPatch(g, {
+            pages: [
+                {
+                    id: 'page-home',
+                    type: 'home',
+                    urlPattern: '/',
+                    entry: true,
+                },
+                {
+                    id: 'page-popup',
+                    type: 'form',
+                    urlPattern: '/',
+                    overlay: true,
+                },
+            ],
+        });
+        expect(g.pages.find((p) => p.id === 'page-popup')?.overlay).toBe(
+            true,
+        );
+        expect(() => parseGraph(g)).not.toThrow();
+    });
+
     it('defaults a new field to unverified', () => {
         const g = bookshopGraph();
         applyPatch(g, {

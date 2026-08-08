@@ -27,6 +27,7 @@ const pageInput = z.object({
     urlPattern: z.string(),
     components: z.array(z.string()).optional(),
     stateDimensions: z.array(StateDimensionSchema).optional(),
+    overlay: z.boolean().optional(),
     /** Marks this page as where plans start. */
     entry: z.boolean().optional(),
 });
@@ -245,6 +246,7 @@ function applyPagesPatch(
             ...(p.stateDimensions
                 ? { stateDimensions: p.stateDimensions }
                 : {}),
+            ...(p.overlay ? { overlay: p.overlay } : {}),
             learnedAt: now,
         });
         if (p.entry) graph.entryPageId = id;

@@ -67,7 +67,17 @@ export function bookshopGraph(): SiteGraph {
                 id: 'page-detail',
                 type: 'detail',
                 urlPattern: '/catalogue/:slug/index.html',
+                components: ['comp-contact-button'],
+                learnedAt: NOW,
+            },
+            {
+                id: 'page-contact',
+                type: 'form',
+                // Shares the detail page's urlPattern: it opens as an overlay on
+                // top of the detail page rather than navigating anywhere of its own.
+                urlPattern: '/catalogue/:slug/index.html',
                 components: [],
+                overlay: true,
                 learnedAt: NOW,
             },
         ],
@@ -96,6 +106,12 @@ export function bookshopGraph(): SiteGraph {
                 locator: { css: 'ul.pager' },
                 meta: { paginationMode: 'next' },
             },
+            {
+                id: 'comp-contact-button',
+                pageId: 'page-detail',
+                type: 'button',
+                locator: { role: 'button', name: 'Contact seller' },
+            },
         ],
         edges: [
             {
@@ -111,6 +127,13 @@ export function bookshopGraph(): SiteGraph {
                 targetNode: 'page-detail',
                 action: 'click',
                 locator: { css: 'ol.row > li h3 > a' },
+            },
+            {
+                id: 'edge-detail-to-contact',
+                sourceNode: 'comp-contact-button',
+                targetNode: 'page-contact',
+                action: 'click',
+                locator: { role: 'button', name: 'Contact seller' },
             },
         ],
         fields: [

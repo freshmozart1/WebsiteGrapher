@@ -146,6 +146,19 @@ describe('buildPlan', () => {
         expect(plan.notes.join(' ')).toMatch(/only one sample page/);
     });
 
+    it('describes the destination as an overlay rather than a page when it is one', () => {
+        const plan = buildPlan(bookshopGraph(), {
+            kind: 'page',
+            pageId: 'page-contact',
+        });
+        expect(plan.ok).toBe(true);
+        if (!plan.ok) return;
+        expect(plan.destination.overlay).toBe(true);
+        expect(plan.steps.at(-1)?.description).toMatch(
+            /to reach the form overlay/,
+        );
+    });
+
     describe('gaps', () => {
         it('reports an unknown field with the names that do exist', () => {
             const plan = buildPlan(bookshopGraph(), {
