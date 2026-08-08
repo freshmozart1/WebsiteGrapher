@@ -5,6 +5,7 @@ import {
     primaryCluster,
     type PageObservation,
 } from '../../src/analyzer/observe.js';
+import { classifyPage } from '../../src/analyzer/classify.js';
 import { synthesizeLocator } from '../../src/locator/synthesize.js';
 import { resolveLocator } from '../../src/locator/resolve.js';
 import { startFixtureSite, type FixtureSite } from '../fixtures/site/server.js';
@@ -120,6 +121,56 @@ describe('observing the product list', () => {
     });
 });
 
+describe('observing a row-split grid with hashed classnames', () => {
+    it('merges the two row containers into one six-item cluster', async () => {
+        const obs = await observe('/careers.html');
+        const top = primaryCluster(obs.clusters);
+        expect(top).toBeDefined();
+        expect(top!.count).toBe(6);
+        // Items are direct children of a *row*, not of the container, so
+        // itemCss carries the row's own selector too — see the comment on
+        // this in findMergedClusters (src/analyzer/structure.ts).
+        expect(top!.itemCss).toBe('div.role-row > div.role-card');
+    });
+
+    it('reports the grid wrapper as the container, not a single row', async () => {
+        await withPage({ url: `${site.url}/careers.html` }, async (page) => {
+            const obs = await observePage(page);
+            const top = primaryCluster(obs.clusters)!;
+            const element = await page.$(top.containerCss);
+            expect(element).not.toBeNull();
+            const childCount = await element!.evaluate(
+                (el) => el.children.length,
+            );
+            // The two row wrappers, not the six cards a mispicked row would have.
+            expect(childCount).toBe(2);
+        });
+    });
+
+    it('composes containerCss + itemCss into a selector that finds every card', async () => {
+        // This is exactly how src/analyzer/learn.ts builds its item locator
+        // (`${containerCss} > ${itemCss}`) — if containerCss and itemCss
+        // don't agree on where the items actually sit in the DOM, this
+        // composed selector silently resolves to nothing.
+        await withPage({ url: `${site.url}/careers.html` }, async (page) => {
+            const obs = await observePage(page);
+            const top = primaryCluster(obs.clusters)!;
+            const matches = await page.$$(
+                `${top.containerCss} > ${top.itemCss}`,
+            );
+            expect(matches.length).toBe(6);
+        });
+    });
+
+    it('does not also report the individual rows as separate clusters', async () => {
+        const obs = await observe('/careers.html');
+        const cardFragments = obs.clusters.filter((c) =>
+            c.itemCss.endsWith('div.role-card'),
+        );
+        expect(cardFragments.length).toBe(1);
+    });
+});
+
 describe('observing a detail page', () => {
     it('looks like an item URL and carries a single h1', async () => {
         const obs = await observe('/product/2.html');
@@ -147,6 +198,20 @@ describe('observing a form page', () => {
         const obs = await observe('/contact.html');
         const email = obs.elements.find((e) => e.id === 'email');
         expect(email?.form?.method).toBe('post');
+    });
+});
+
+describe('observing a page with a hidden popup form', () => {
+    it('does not count the hidden form or its inputs', async () => {
+        const obs = await observe('/popup-form.html');
+        expect(obs.signals.formCount).toBe(0);
+        expect(obs.signals.postFormCount).toBe(0);
+    });
+
+    it('is not classified as a form', async () => {
+        const obs = await observe('/popup-form.html');
+        const classification = classifyPage(obs.signals, false);
+        expect(classification.type).not.toBe('form');
     });
 });
 
