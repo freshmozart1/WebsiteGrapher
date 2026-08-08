@@ -276,14 +276,59 @@ export async function findRepetition(page: Page): Promise<RepetitionCluster[]> {
             }
 
             /**
+             * Tries to merge one same-signature bucket of `wrapper`'s direct
+             * children (`candidateRows`) into a single cluster. The bucket
+             * only merges when *every* row in it independently looks like a
+             * repeating list, and all of those lists share one item
+             * signature; a wrapper with one real row of cards next to an
+             * unrelated same-shaped row of, say, testimonials should not be
+             * forced together. Returns null when the bucket doesn't qualify.
+             */
+            function tryMergeCandidateRows(
+                wrapper: Element,
+                candidateRows: Element[],
+            ): { cluster: RepetitionCluster; subsumedRows: Element[] } | null {
+                if (candidateRows.length < minRows) return null;
+
+                const resolved = candidateRows.map(rowItemSignature);
+                if (resolved.some((r) => r === null)) return null;
+                const rows = resolved as { sig: string; items: Element[] }[];
+
+                const firstRow = rows[0];
+                if (!firstRow) return null;
+                if (rows.some((r) => r.sig !== firstRow.sig)) return null;
+
+                const flattenedItems = rows.flatMap((r) => r.items);
+                if (flattenedItems.length < minItems) return null;
+
+                const cluster = buildCluster(wrapper, flattenedItems);
+                if (!cluster) return null;
+
+                const firstCandidateRow = candidateRows[0];
+                if (!firstCandidateRow) return null;
+
+                // `buildCluster`'s itemCss is only valid for items that are
+                // direct children of `container` — here they're direct
+                // children of a *row*, which is itself a direct child of
+                // `wrapper`. Prepending the row's own selector keeps
+                // `${containerCss} > ${itemCss}` (how callers like learn.ts
+                // compose these two fields) resolving to every item across
+                // every matching row, not zero.
+                return {
+                    cluster: {
+                        ...cluster,
+                        itemCss: `${classSelectorFor(firstCandidateRow)} > ${cluster.itemCss}`,
+                    },
+                    subsumedRows: candidateRows,
+                };
+            }
+
+            /**
              * A grid is sometimes split across several row wrappers instead of
              * sitting under one parent (Elementor's column layout does this).
              * For every candidate `wrapper`, group its direct children — the
-             * candidate rows — by signature. A bucket of rows only merges when
-             * *every* row in it independently looks like a repeating list, and
-             * all of those lists share one item signature; a wrapper with one
-             * real row of cards next to an unrelated same-shaped row of, say,
-             * testimonials should not be forced together.
+             * candidate rows — by signature, and try to merge each
+             * same-signature bucket into a single cluster.
              */
             function findMergedClusters(
                 allContainers: Element[],
@@ -299,44 +344,11 @@ export async function findRepetition(page: Page): Promise<RepetitionCluster[]> {
                     for (const [, candidateRows] of groupBySignature(
                         wrapper,
                     )) {
-                        if (candidateRows.length < minRows) continue;
-
-                        const resolved = candidateRows.map(rowItemSignature);
-                        if (resolved.some((r) => r === null)) continue;
-                        const rows = resolved as {
-                            sig: string;
-                            items: Element[];
-                        }[];
-
-                        const firstRow = rows[0];
-                        if (!firstRow) continue;
-                        if (rows.some((r) => r.sig !== firstRow.sig)) {
-                            continue;
-                        }
-
-                        const flattenedItems = rows.flatMap((r) => r.items);
-                        if (flattenedItems.length < minItems) continue;
-
-                        const cluster = buildCluster(wrapper, flattenedItems);
-                        if (cluster) {
-                            const firstCandidateRow = candidateRows[0];
-                            if (!firstCandidateRow) continue;
-                            // `buildCluster`'s itemCss is only valid for items
-                            // that are direct children of `container` — here
-                            // they're direct children of a *row*, which is
-                            // itself a direct child of `wrapper`. Prepending
-                            // the row's own selector keeps
-                            // `${containerCss} > ${itemCss}` (how callers like
-                            // learn.ts compose these two fields) resolving to
-                            // every item across every matching row, not zero.
-                            merges.push({
-                                cluster: {
-                                    ...cluster,
-                                    itemCss: `${classSelectorFor(firstCandidateRow)} > ${cluster.itemCss}`,
-                                },
-                                subsumedRows: candidateRows,
-                            });
-                        }
+                        const merge = tryMergeCandidateRows(
+                            wrapper,
+                            candidateRows,
+                        );
+                        if (merge) merges.push(merge);
                     }
                 }
 
