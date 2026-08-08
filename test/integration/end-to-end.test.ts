@@ -104,13 +104,31 @@ describe('learning the fixture site end to end', () => {
         expect(types).toContain('overview');
         expect(types).toContain('detail');
 
-        // entry -> overview -> detail, with the second edge hanging off the list.
-        expect(graph.edges).toHaveLength(2);
+        // entry -> overview -> detail, with the third edge hanging off the
+        // list, plus one nav edge for the entry-page link that findOverview
+        // visited but rejected (it has no repeating list of its own).
+        expect(graph.edges).toHaveLength(3);
         const toDetail = graph.edges.find(
             (e) => e.targetNode === 'page-detail',
         );
         expect(toDetail?.sourceNode).toBe('comp-list');
         expect(toDetail?.action).toBe('click');
+
+        // The regression check for issue #4: a nav candidate that findOverview
+        // visited but did not pick as the overview must still be stored as a
+        // page, with an edge from the entry page, instead of being silently
+        // discarded once the crawl budget paid for the visit.
+        const nonOverviewEdges = graph.edges.filter(
+            (e) =>
+                e.sourceNode === 'page-entry' && e.targetNode !== 'page-overview',
+        );
+        expect(nonOverviewEdges).toHaveLength(1);
+        const navPage = graph.pages.find(
+            (p) => p.id === nonOverviewEdges[0]?.targetNode,
+        );
+        expect(navPage).toBeDefined();
+        expect(navPage?.type).toBe('home');
+        expect(navPage?.id).not.toBe(graph.entryPageId);
     });
 
     it('records the list with its item and click-target locators', async () => {
