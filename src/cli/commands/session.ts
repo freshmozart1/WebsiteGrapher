@@ -1,14 +1,36 @@
 import { clearSession, listSessions } from '../../browser/session.js';
-import { EXIT, UsageError } from '../exit.js';
+import { EXIT, UsageError, isHelpFlag } from '../exit.js';
 
 /**
  * A session is saved cookies and a last URL, not a running browser — there is
  * never a browser process to tear down between commands.
  */
+
+const SESSION_USAGE = `wgraph session <subcommand> [args...]
+
+  wgraph session list          Saved browser state
+  wgraph session clear <name>  Delete a saved session
+
+Each subcommand also accepts -h / --help for its own usage.`;
+
+const SESSION_LIST_USAGE = `wgraph session list — Saved browser state.`;
+
+const SESSION_CLEAR_USAGE = `wgraph session clear <name>
+
+Delete the saved cookies and last URL for one session.`;
+
 export async function sessionCommand(argv: string[]): Promise<number> {
     const sub = argv[0];
+    if (isHelpFlag([sub ?? ''])) {
+        console.log(SESSION_USAGE);
+        return EXIT.OK;
+    }
     switch (sub) {
         case 'list': {
+            if (isHelpFlag(argv.slice(1))) {
+                console.log(SESSION_LIST_USAGE);
+                return EXIT.OK;
+            }
             const sessions = await listSessions();
             if (sessions.length === 0) {
                 console.log(
@@ -24,6 +46,10 @@ export async function sessionCommand(argv: string[]): Promise<number> {
             return EXIT.OK;
         }
         case 'clear': {
+            if (isHelpFlag(argv.slice(1))) {
+                console.log(SESSION_CLEAR_USAGE);
+                return EXIT.OK;
+            }
             const name = argv[1];
             if (!name) throw new UsageError('wgraph session clear <name>');
             await clearSession(name);

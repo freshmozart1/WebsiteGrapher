@@ -6,14 +6,32 @@ import { findFieldCandidates } from '../../analyzer/fields.js';
 import { tierElements } from '../../analyzer/risk.js';
 import { artifactsDir, domainKey } from '../../graph/store.js';
 import { join } from 'node:path';
-import { EXIT, UsageError } from '../exit.js';
+import { EXIT, UsageError, isHelpFlag } from '../exit.js';
+import { renderObservation } from '../render.js';
 
 /**
  * The agent's window onto a page: everything mechanical that can be said about
  * it, with no decision taken. The draft classification is included and clearly
  * labelled as a draft, so the agent can agree or overrule it.
  */
+
+const OBSERVE_USAGE = `wgraph observe <url> [options]
+
+Describe one page in full, with no decision taken — no graph is written.
+Useful for inspecting what the analyzer sees before trusting its draft
+classification.
+
+Options:
+  --json         Print the full observation as JSON
+  --fields       Also list candidate field locators found on the page
+  --screenshot   Save a screenshot alongside the observation
+  --headed       Show the browser window instead of running headless`;
+
 export async function observeCommand(argv: string[]): Promise<number> {
+    if (isHelpFlag(argv)) {
+        console.log(OBSERVE_USAGE);
+        return EXIT.OK;
+    }
     const { values, positionals } = parseArgs({
         args: argv,
         options: {
@@ -80,50 +98,6 @@ export async function observeCommand(argv: string[]): Promise<number> {
         return EXIT.OK;
     }
 
-    const { observation, cluster, draft, tiers, fields } = result;
-    const lines = [
-        `${observation.url}`,
-        `"${observation.title}"`,
-        '',
-        `Draft page type: ${draft.type} (${draft.confidence}) — ${draft.reasons.join('; ')}`,
-        `  This is a guess from counted signals. Overrule it if the page does not fit.`,
-        '',
-        `Elements: ${observation.elements.length}  ` +
-            `(${tiers.safe.length} safe to probe, ${tiers.confirm.length} need approval, ` +
-            `${tiers.blocked.length} off limits)`,
-        `Accessibility tree: ${observation.accessibility ? `${observation.accessibility.length} nodes` : 'unavailable'}`,
-    ];
-
-    if (cluster) {
-        lines.push(
-            '',
-            `List: ${cluster.count} x ${cluster.itemCss} in ${cluster.containerCss}`,
-            `  click target: ${cluster.clickTargetCss ?? 'none'}`,
-        );
-    } else {
-        lines.push('', 'List: none found');
-    }
-
-    const rejected = observation.clusters.filter((c) => c.excluded);
-    if (rejected.length > 0) {
-        lines.push('', 'Rejected repeating structures:');
-        for (const c of rejected) {
-            lines.push(`  ${c.count} x ${c.itemCss} — ${c.exclusionReason}`);
-        }
-    }
-
-    if (fields) {
-        lines.push('', 'Field candidates:');
-        for (const f of fields) {
-            lines.push(
-                `  ${f.suggestedName.padEnd(14)} ${f.css}  (${f.confidence}: ${f.reason})`,
-            );
-        }
-    }
-
-    if (observation.screenshot)
-        lines.push('', `Screenshot: ${observation.screenshot}`);
-
-    console.log(lines.join('\n'));
+    console.log(renderObservation(result));
     return EXIT.OK;
 }
