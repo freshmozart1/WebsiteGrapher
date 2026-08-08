@@ -75,6 +75,8 @@ Budgets cap pages, probes and wall-clock; `robots.txt` is honoured; every run us
 | `wgraph graph validate <domain>`            | Check the graph is sound                      |
 | `wgraph graph apply <domain> --file -`      | Apply a JSON patch                            |
 
+Every command and subcommand accepts `-h` / `--help`. `wgraph graph apply --help` prints the full JSON patch schema with an annotated example — that's the reference for what a patch may contain.
+
 Exit codes: `0` ok, `1` error, `2` nothing learned that answers this, `3` approvals pending.
 
 Graphs live in `~/.claude/website-graphs/<domain>.json` — readable, diffable, hand-editable. Override with `WGRAPH_HOME`.
