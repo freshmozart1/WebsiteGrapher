@@ -1,6 +1,6 @@
 {
     "name": "website-grapher",
-    "version": "0.1.2",
+    "version": "0.2.0",
     "private": true,
     "description": "Learns the structure of a website once and answers navigation questions from a stored semantic graph.",
     "type": "module",

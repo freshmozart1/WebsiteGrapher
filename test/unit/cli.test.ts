@@ -3,7 +3,12 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+    analyzeCommand,
+    resumeCommand,
+} from '../../src/cli/commands/analyze.js';
 import { graphCommand } from '../../src/cli/commands/graph.js';
+import { observeCommand } from '../../src/cli/commands/observe.js';
 import { askCommand, planCommand } from '../../src/cli/commands/plan.js';
 import { sessionCommand } from '../../src/cli/commands/session.js';
 import { EXIT, UsageError } from '../../src/cli/exit.js';
@@ -100,6 +105,11 @@ describe('wgraph ask', () => {
             UsageError,
         );
     });
+
+    it.each(['-h', '--help'])('prints usage for %s', async (flag) => {
+        expect(await askCommand([flag])).toBe(EXIT.OK);
+        expect(printed()).toContain('wgraph ask <domain>');
+    });
 });
 
 describe('wgraph plan', () => {
@@ -140,6 +150,32 @@ describe('wgraph plan', () => {
                 'page-home',
             ]),
         ).rejects.toThrow(UsageError);
+    });
+
+    it.each(['-h', '--help'])('prints usage for %s', async (flag) => {
+        expect(await planCommand([flag])).toBe(EXIT.OK);
+        expect(printed()).toContain('wgraph plan <domain>');
+    });
+});
+
+describe('wgraph analyze', () => {
+    it.each(['-h', '--help'])('prints usage for %s', async (flag) => {
+        expect(await analyzeCommand([flag])).toBe(EXIT.OK);
+        expect(printed()).toContain('wgraph analyze <url>');
+    });
+});
+
+describe('wgraph resume', () => {
+    it.each(['-h', '--help'])('prints usage for %s', async (flag) => {
+        expect(await resumeCommand([flag])).toBe(EXIT.OK);
+        expect(printed()).toContain('wgraph resume <domain>');
+    });
+});
+
+describe('wgraph observe', () => {
+    it.each(['-h', '--help'])('prints usage for %s', async (flag) => {
+        expect(await observeCommand([flag])).toBe(EXIT.OK);
+        expect(printed()).toContain('wgraph observe <url>');
     });
 });
 
@@ -265,6 +301,50 @@ describe('wgraph graph', () => {
     it('rejects an unknown subcommand', async () => {
         await expect(graphCommand(['frobnicate'])).rejects.toThrow(UsageError);
     });
+
+    it.each(['-h', '--help'])(
+        'prints subcommand listing for %s',
+        async (flag) => {
+            expect(await graphCommand([flag])).toBe(EXIT.OK);
+            expect(printed()).toContain('list');
+            expect(printed()).toContain('show');
+            expect(printed()).toContain('validate');
+            expect(printed()).toContain('apply');
+            expect(printed()).toContain('add-type');
+            expect(printed()).toContain('set-entry');
+        },
+    );
+
+    it.each([
+        ['list'],
+        ['show'],
+        ['validate'],
+        ['apply'],
+        ['add-type'],
+        ['set-entry'],
+    ])('prints usage for "%s --help" without throwing', async (sub) => {
+        expect(await graphCommand([sub, '--help'])).toBe(EXIT.OK);
+        expect(printed().length).toBeGreaterThan(0);
+    });
+
+    it('reproduces the issue: "graph apply --help" does not throw', async () => {
+        expect(await graphCommand(['apply', '--help'])).toBe(EXIT.OK);
+        const first = printed();
+        expect(first).toContain('pages');
+        expect(first).toContain('components');
+        expect(first).toContain('fields');
+        expect(first).toContain('edges');
+    });
+
+    it('reproduces the issue: "graph apply <domain> --help" does not throw', async () => {
+        expect(await graphCommand(['apply', 'shop.example', '--help'])).toBe(
+            EXIT.OK,
+        );
+        expect(printed()).toContain('pages');
+        expect(printed()).toContain('components');
+        expect(printed()).toContain('fields');
+        expect(printed()).toContain('edges');
+    });
 });
 
 describe('wgraph session', () => {
@@ -312,4 +392,28 @@ describe('wgraph session', () => {
             UsageError,
         );
     });
+
+    it.each(['-h', '--help'])(
+        'prints subcommand listing for %s',
+        async (flag) => {
+            expect(await sessionCommand([flag])).toBe(EXIT.OK);
+            expect(printed()).toContain('list');
+            expect(printed()).toContain('clear');
+        },
+    );
+
+    it('prints usage for "session clear --help" instead of clearing a session named --help', async () => {
+        expect(await sessionCommand(['clear', '--help'])).toBe(EXIT.OK);
+        expect(printed()).toContain('wgraph session clear <name>');
+        expect(printed()).not.toContain('Cleared saved state for "--help"');
+    });
+
+    it.each(['-h', '--help'])(
+        'prints usage for "session list %s" instead of listing sessions',
+        async (flag) => {
+            expect(await sessionCommand(['list', flag])).toBe(EXIT.OK);
+            expect(printed()).toContain('wgraph session list');
+            expect(printed()).not.toMatch(/No saved sessions/);
+        },
+    );
 });

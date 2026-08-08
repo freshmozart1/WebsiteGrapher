@@ -4,6 +4,16 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.2.0] - 2026-08-08
+
+### Added
+
+- `-h` / `--help` now works on every CLI command and subcommand. Previously
+  `--help` crashed with `Unknown option '--help'`, because `parseArgs` runs in
+  strict mode and rejects any flag a command doesn't declare (closes #5).
+- `wgraph graph apply --help` documents the full JSON patch schema, with a
+  fully annotated example of every patch field.
+
 ## [0.1.2] - 2026-08-08
 
 ### Fixed

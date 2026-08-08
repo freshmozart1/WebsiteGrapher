@@ -7,7 +7,7 @@ import {
     withGraph,
 } from '../../graph/store.js';
 import { learnSite, type LearnOutcome } from '../../analyzer/learn.js';
-import { EXIT, UsageError } from '../exit.js';
+import { EXIT, UsageError, isHelpFlag } from '../exit.js';
 
 /**
  * `analyze` learns a site for the first time. `resume` continues a run that
@@ -17,7 +17,25 @@ import { EXIT, UsageError } from '../exit.js';
  * exit code 3 with a list of things to approve.
  */
 
+const ANALYZE_USAGE = `wgraph analyze <url> [options]
+
+Learn a site for the first time by driving a real browser. Refuses to
+re-learn a site that already has a graph unless --force is passed.
+
+Options:
+  --max-pages <n>     Stop after visiting this many pages
+  --max-probes <n>    Stop after running this many probes
+  --max-seconds <n>   Stop after this many seconds
+  --headed            Show the browser window instead of running headless
+  --force             Re-learn a site that already has a graph
+  --json              Print the resulting graph as JSON
+  --quiet             Suppress progress lines on stderr`;
+
 export async function analyzeCommand(argv: string[]): Promise<number> {
+    if (isHelpFlag(argv)) {
+        console.log(ANALYZE_USAGE);
+        return EXIT.OK;
+    }
     const { values, positionals } = parseArgs({
         args: argv,
         options: {
@@ -65,7 +83,26 @@ export async function analyzeCommand(argv: string[]): Promise<number> {
     );
 }
 
+const RESUME_USAGE = `wgraph resume <domain> (--approve <id,...> | --approve-all) [options]
+
+Continue a learning run that stopped at a checkpoint, approving specific
+probes (or all of them) so they can now be run.
+
+Options:
+  --approve <id,...>  Comma-separated ids of probes to approve
+  --approve-all       Approve every pending probe
+  --max-pages <n>     Stop after visiting this many pages
+  --max-probes <n>    Stop after running this many probes
+  --max-seconds <n>   Stop after this many seconds
+  --headed            Show the browser window instead of running headless
+  --json              Print the resulting graph as JSON
+  --quiet             Suppress progress lines on stderr`;
+
 export async function resumeCommand(argv: string[]): Promise<number> {
+    if (isHelpFlag(argv)) {
+        console.log(RESUME_USAGE);
+        return EXIT.OK;
+    }
     const { values, positionals } = parseArgs({
         args: argv,
         options: {
