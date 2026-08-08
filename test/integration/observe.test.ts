@@ -5,6 +5,7 @@ import {
     primaryCluster,
     type PageObservation,
 } from '../../src/analyzer/observe.js';
+import { classifyPage } from '../../src/analyzer/classify.js';
 import { synthesizeLocator } from '../../src/locator/synthesize.js';
 import { resolveLocator } from '../../src/locator/resolve.js';
 import { startFixtureSite, type FixtureSite } from '../fixtures/site/server.js';
@@ -147,6 +148,20 @@ describe('observing a form page', () => {
         const obs = await observe('/contact.html');
         const email = obs.elements.find((e) => e.id === 'email');
         expect(email?.form?.method).toBe('post');
+    });
+});
+
+describe('observing a page with a hidden popup form', () => {
+    it('does not count the hidden form or its inputs', async () => {
+        const obs = await observe('/popup-form.html');
+        expect(obs.signals.formCount).toBe(0);
+        expect(obs.signals.postFormCount).toBe(0);
+    });
+
+    it('is not classified as a form', async () => {
+        const obs = await observe('/popup-form.html');
+        const classification = classifyPage(obs.signals, false);
+        expect(classification.type).not.toBe('form');
     });
 });
 

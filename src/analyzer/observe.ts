@@ -1,6 +1,7 @@
 import { mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import type { Page } from 'playwright';
+import type { DomHelpers } from '../browser/dom-helpers.js';
 import { extractElements, type NormalizedElement } from './elements.js';
 import { findRepetition, type RepetitionCluster } from './structure.js';
 import { tryAccessibilityTree, type AxNode } from './axtree.js';
@@ -107,7 +108,7 @@ export async function observePage(
             formCount: counts.forms,
             postFormCount: counts.postForms,
             inputCount: elements.filter(
-                (e) => e.tag === 'input' || e.tag === 'textarea',
+                (e) => (e.tag === 'input' || e.tag === 'textarea') && e.visible,
             ).length,
             searchInputCount: elements.filter(
                 (e) => e.type === 'search' || e.role === 'searchbox',
@@ -171,12 +172,14 @@ function paginationHints(elements: NormalizedElement[]): string[] {
 
 async function countDocument(page: Page) {
     return await page.evaluate(() => {
+        const wg: DomHelpers = window.__wgraph;
         const forms = Array.prototype.slice.call(
             document.querySelectorAll('form'),
         ) as HTMLFormElement[];
+        const visibleForms = forms.filter((f) => wg.isVisible(f));
         return {
-            forms: forms.length,
-            postForms: forms.filter(
+            forms: visibleForms.length,
+            postForms: visibleForms.filter(
                 (f) =>
                     (f.getAttribute('method') ?? 'get').toLowerCase() ===
                     'post',
