@@ -17,7 +17,13 @@ const ANALYZERS = [
     'analyzer/structure.ts',
     'analyzer/fields.ts',
 ];
-const SHARED = ['cssPathOf', 'relativePath', 'landmarkOf', 'segmentFor'];
+const SHARED = [
+    'cssPathOf',
+    'relativePath',
+    'landmarkOf',
+    'segmentFor',
+    'isVisible',
+];
 
 describe('the in-page DOM helpers have one definition', () => {
     it.each(ANALYZERS)('%s defines none of them itself', async (file) => {
