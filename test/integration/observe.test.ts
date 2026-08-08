@@ -126,7 +126,10 @@ describe('observing a row-split grid with hashed classnames', () => {
         const top = primaryCluster(obs.clusters);
         expect(top).toBeDefined();
         expect(top!.count).toBe(6);
-        expect(top!.itemCss).toBe('div.role-card.role-card-d4e5f6');
+        // Items are direct children of a *row*, not of the container, so
+        // itemCss carries the row's own selector too — see the comment on
+        // this in findMergedClusters (src/analyzer/structure.ts).
+        expect(top!.itemCss).toBe('div.role-row > div.role-card');
     });
 
     it('reports the grid wrapper as the container, not a single row', async () => {
@@ -143,10 +146,25 @@ describe('observing a row-split grid with hashed classnames', () => {
         });
     });
 
+    it('composes containerCss + itemCss into a selector that finds every card', async () => {
+        // This is exactly how src/analyzer/learn.ts builds its item locator
+        // (`${containerCss} > ${itemCss}`) — if containerCss and itemCss
+        // don't agree on where the items actually sit in the DOM, this
+        // composed selector silently resolves to nothing.
+        await withPage({ url: `${site.url}/careers.html` }, async (page) => {
+            const obs = await observePage(page);
+            const top = primaryCluster(obs.clusters)!;
+            const matches = await page.$$(
+                `${top.containerCss} > ${top.itemCss}`,
+            );
+            expect(matches.length).toBe(6);
+        });
+    });
+
     it('does not also report the individual rows as separate clusters', async () => {
         const obs = await observe('/careers.html');
         const cardFragments = obs.clusters.filter((c) =>
-            c.itemCss.startsWith('div.role-card'),
+            c.itemCss.endsWith('div.role-card'),
         );
         expect(cardFragments.length).toBe(1);
     });

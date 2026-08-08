@@ -109,9 +109,14 @@ export async function findRepetition(page: Page): Promise<RepetitionCluster[]> {
                 return token;
             }
 
-            /** Tag + classes + child tag sequence. Deliberately ignores text. */
-            function signatureOf(el: Element): string {
-                const classes = Array.from(
+            /** `el`'s classes, hash suffixes stripped and deduped, sorted for a
+             *  stable join. Shared by `signatureOf` (which needs them as part of
+             *  a grouping key) and `classSelectorFor` (which needs them as a CSS
+             *  selector) so the two never drift apart — a selector built from a
+             *  different class set than the one used to group its items would
+             *  match some other set of elements than the one actually grouped. */
+            function normalizedClasses(el: Element): string[] {
+                return Array.from(
                     new Set(
                         (
                             Array.prototype.slice.call(
@@ -121,13 +126,28 @@ export async function findRepetition(page: Page): Promise<RepetitionCluster[]> {
                             .map(normalizeClassToken)
                             .filter((c): c is string => c !== null),
                     ),
-                )
-                    .sort()
-                    .join('.');
+                ).sort();
+            }
+
+            /** Tag + classes + child tag sequence. Deliberately ignores text. */
+            function signatureOf(el: Element): string {
                 const children = Array.prototype.map
                     .call(el.children, (c: Element) => c.tagName.toLowerCase())
                     .join(',');
-                return `${el.tagName.toLowerCase()}|${classes}|${children}`;
+                return `${el.tagName.toLowerCase()}|${normalizedClasses(el).join('.')}|${children}`;
+            }
+
+            /** Tag + normalized classes as a CSS selector fragment. Built from
+             *  the same normalized class set as `signatureOf`, so this selector
+             *  matches every sibling that was grouped into the same bucket — not
+             *  just `el` itself. A selector built from `el`'s raw classList would
+             *  also carry el's own per-instance hash class (see
+             *  `normalizeClassToken`), which none of el's bucket-mates share. */
+            function classSelectorFor(el: Element): string {
+                const classes = normalizedClasses(el);
+                return classes.length > 0
+                    ? `${el.tagName.toLowerCase()}.${classes.map((c) => CSS.escape(c)).join('.')}`
+                    : el.tagName.toLowerCase();
             }
 
             function areaOf(el: Element): number {
@@ -185,13 +205,7 @@ export async function findRepetition(page: Page): Promise<RepetitionCluster[]> {
                 );
                 if (totalArea === 0) return null;
 
-                const classes = Array.prototype.slice.call(
-                    first.classList,
-                ) as string[];
-                const itemCss =
-                    classes.length > 0
-                        ? `${first.tagName.toLowerCase()}.${classes.map((c) => CSS.escape(c)).join('.')}`
-                        : first.tagName.toLowerCase();
+                const itemCss = classSelectorFor(first);
 
                 const anchor = first.querySelector('a[href]');
                 const hrefs = items
@@ -305,8 +319,21 @@ export async function findRepetition(page: Page): Promise<RepetitionCluster[]> {
 
                         const cluster = buildCluster(wrapper, flattenedItems);
                         if (cluster) {
+                            const firstCandidateRow = candidateRows[0];
+                            if (!firstCandidateRow) continue;
+                            // `buildCluster`'s itemCss is only valid for items
+                            // that are direct children of `container` — here
+                            // they're direct children of a *row*, which is
+                            // itself a direct child of `wrapper`. Prepending
+                            // the row's own selector keeps
+                            // `${containerCss} > ${itemCss}` (how callers like
+                            // learn.ts compose these two fields) resolving to
+                            // every item across every matching row, not zero.
                             merges.push({
-                                cluster,
+                                cluster: {
+                                    ...cluster,
+                                    itemCss: `${classSelectorFor(firstCandidateRow)} > ${cluster.itemCss}`,
+                                },
                                 subsumedRows: candidateRows,
                             });
                         }
